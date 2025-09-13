@@ -11,35 +11,34 @@ export default function StudentLogin() {
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
   const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front by default
-
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   // ------------------- Camera -------------------
+  const startCamera = async () => {
+    if (!videoRef.current) return;
+    stopCamera();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: cameraFacingMode },
+      });
+      streamRef.current = stream;
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+    } catch (err) {
+      setStatus('❌ Cannot access camera: ' + err.message);
+      console.error('Camera error:', err);
+    }
+  };
+
   const stopCamera = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
     if (videoRef.current) videoRef.current.srcObject = null;
-  };
-
-  const startCamera = async (facing = 'user') => {
-    if (!videoRef.current) return;
-    stopCamera();
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing }
-      });
-      streamRef.current = stream;
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
-    } catch (err) {
-      console.error('Cannot access camera:', err);
-      setStatus('❌ Cannot access camera');
-    }
   };
 
   // ------------------- Logout -------------------
@@ -86,6 +85,8 @@ export default function StudentLogin() {
 
     const verifyFace = async () => {
       if (!videoRef.current) return;
+
+      // Wait until video metadata loaded
       if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
         videoRef.current.onloadedmetadata = () => verifyFace();
         return;
@@ -104,10 +105,11 @@ export default function StudentLogin() {
         });
 
         if (res.data.success) {
-          setStatus('✅ Face verified! Moving to QR scan...');
+          setStatus('✅ Face verified! Move to QR scan...');
           setFaceBorderColor('limegreen');
           stopCamera();
           setTimeout(() => {
+            // Swap camera to back for mobile QR scan
             setCameraFacingMode(isMobile ? 'environment' : 'user');
             setStep('qr');
           }, 1000);
@@ -126,10 +128,10 @@ export default function StudentLogin() {
       }
     };
 
-    startCamera('user').then(() => verifyFace());
+    startCamera().then(() => verifyFace());
 
     return () => clearTimeout(retryTimeout);
-  }, [step, loggedUser]);
+  }, [step, loggedUser, cameraFacingMode]);
 
   // ------------------- QR Scan -------------------
   const handleScan = async (data) => {
@@ -159,6 +161,16 @@ export default function StudentLogin() {
   };
 
   const handleError = (err) => console.error('QR Scanner error:', err);
+
+  // ------------------- Swap Camera Button -------------------
+  const handleSwapCamera = async () => {
+    stopCamera();
+    setStatus('Switching camera...');
+    const newFacing = cameraFacingMode === 'user' ? 'environment' : 'user';
+    setCameraFacingMode(newFacing);
+    // delay to let camera restart
+    setTimeout(() => setStatus(''), 500);
+  };
 
   return (
     <div style={{ padding: 20, position: 'relative' }}>
@@ -209,10 +221,7 @@ export default function StudentLogin() {
               color: 'white',
               fontWeight: 'bold',
               cursor: 'pointer',
-              transition: '0.2s'
             }}
-            onMouseOver={e => e.currentTarget.style.backgroundColor = '#218838'}
-            onMouseOut={e => e.currentTarget.style.backgroundColor = '#28a745'}
           >
             Login
           </button>
@@ -255,13 +264,9 @@ export default function StudentLogin() {
         <div style={{ position: 'relative', width: 320 }}>
           <p>Step: Scan Teacher QR to mark attendance</p>
 
-          {/* Swap Camera Button */}
           {isMobile && (
             <button
-              onClick={() => {
-                stopCamera();
-                setCameraFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
-              }}
+              onClick={handleSwapCamera}
               style={{
                 marginBottom: 5,
                 padding: '6px 12px',
@@ -278,7 +283,7 @@ export default function StudentLogin() {
 
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
             <QrScanner
-              key={cameraFacingMode} // remount on camera change
+              key={cameraFacingMode} // remounts scanner on facing change
               delay={300}
               style={{ width: '100%' }}
               onError={handleError}
