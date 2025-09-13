@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
+import api from './api';
 
 export default function RegisterPage({ onRedirectToLogin }) {
   const videoRef = useRef(null);
