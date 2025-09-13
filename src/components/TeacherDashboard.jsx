@@ -54,36 +54,37 @@ export default function TeacherDashboard() {
     }
   };
 
-  /* ---------------- Face Verify ---------------- */
-  const autoFaceVerify = async () => {
-    if (!videoRef.current || faceVerified || verificationFailed) return;
+ const autoFaceVerify = async () => {
+  if (!videoRef.current || faceVerified) return; // 🔥 removed verificationFailed
 
-    const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    const imageBase64 = canvas.toDataURL("image/jpeg");
+  const canvas = document.createElement("canvas");
+  canvas.width = videoRef.current.videoWidth;
+  canvas.height = videoRef.current.videoHeight;
+  canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+  const imageBase64 = canvas.toDataURL("image/jpeg");
 
-    try {
-      const res = await api.post("/markAttendanceLive", {
-        userId: form.teacherId,
-        imageBase64,
-      });
+  try {
+    const res = await api.post("/markAttendanceLive", {
+      userId: form.teacherId,
+      imageBase64,
+    });
 
-      if (res.data.success) {
-        setFaceVerified(true);
-        stopCamera();
-        fetchStudents();
-        await createSession();
-      } else {
-        setVerificationFailed(true);
-        faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000);
-      }
-    } catch (err) {
+    if (res.data.success) {
+      setFaceVerified(true);
+      setVerificationFailed(false); 
+      stopCamera();
+      fetchStudents();
+      await createSession();
+    } else {
       setVerificationFailed(true);
-      faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000);
+      faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000); // keep retrying
     }
-  };
+  } catch (err) {
+    setVerificationFailed(true);
+    faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000); // keep retrying
+  }
+};
+
 
   /* ---------------- Students ---------------- */
   const fetchStudents = async () => {
