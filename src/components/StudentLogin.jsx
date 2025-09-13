@@ -10,7 +10,7 @@ export default function StudentLogin() {
   const [sessionId, setSessionId] = useState('');
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
-  const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front camera by default
+  const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front by default
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -37,6 +37,17 @@ export default function StudentLogin() {
     }
     if (videoRef.current) videoRef.current.srcObject = null;
   };
+
+  const swapCamera = () => {
+    stopCamera();
+    setCameraFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
+  };
+
+  // Auto-start camera when entering face step
+  useEffect(() => {
+    if (step === 'face') startCamera();
+    return () => stopCamera();
+  }, [step, cameraFacingMode]);
 
   // ------------------- Logout -------------------
   const handleLogout = () => {
@@ -92,7 +103,7 @@ export default function StudentLogin() {
       canvas.width = videoRef.current.videoWidth;
       canvas.height = videoRef.current.videoHeight;
       canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1]; // strip prefix
+      const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
 
       try {
         const res = await api.post("/markAttendanceLive", {
@@ -105,11 +116,11 @@ export default function StudentLogin() {
           setFaceBorderColor('limegreen');
           stopCamera();
 
-          // Switch to QR step and back camera after a short delay
+          // switch to back camera for mobile, front camera for laptop
           setTimeout(() => {
-            setStep('qr');
             setCameraFacingMode('environment'); // back camera
-          }, 1000);
+            setStep('qr');
+          }, 500);
 
         } else {
           setStatus('❌ Face not matched, retrying...');
@@ -159,12 +170,6 @@ export default function StudentLogin() {
   };
 
   const handleError = (err) => console.error('QR Scanner error:', err);
-
-  // ------------------- Auto-start camera for face step -------------------
-  useEffect(() => {
-    if (step === 'face') startCamera();
-    return () => stopCamera();
-  }, [step, cameraFacingMode]);
 
   return (
     <div style={{ padding: 20, position: 'relative' }}>
@@ -262,7 +267,7 @@ export default function StudentLogin() {
           <p>Step: Scan Teacher QR to mark attendance</p>
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
             <QrScanner
-              key={cameraFacingMode} // 🔥 forces re-mount on camera change
+              key={cameraFacingMode + Date.now()} // 🔥 force remount to switch camera
               delay={300}
               style={{ width: '100%' }}
               onError={handleError}
