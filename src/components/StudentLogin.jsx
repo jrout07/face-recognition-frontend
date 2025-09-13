@@ -2,9 +2,6 @@ import React, { useRef, useState, useEffect } from 'react';
 import QrScanner from 'react-qr-scanner';
 import api from './api';
 
-// Helper to detect mobile
-const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
 export default function StudentLogin() {
   const [form, setForm] = useState({ userId: '', password: '' });
   const [loggedUser, setLoggedUser] = useState(null);
@@ -13,22 +10,28 @@ export default function StudentLogin() {
   const [sessionId, setSessionId] = useState('');
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
-  const [cameraFacingMode, setCameraFacingMode] = useState('user'); // default front
+  const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front by default
+  const [isMobile, setIsMobile] = useState(false);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
+  // Detect if mobile
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    setIsMobile(/Android|iPhone|iPad|iPod/i.test(ua));
+  }, []);
+
   // ------------------- Camera -------------------
   const startCamera = async () => {
-    stopCamera();
     if (!videoRef.current) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: cameraFacingMode },
+        video: { facingMode: cameraFacingMode }
       });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
-      await videoRef.current.play();
+      videoRef.current.play();
     } catch (err) {
       alert('Cannot access camera: ' + err.message);
     }
@@ -40,11 +43,6 @@ export default function StudentLogin() {
       streamRef.current = null;
     }
     if (videoRef.current) videoRef.current.srcObject = null;
-  };
-
-  const swapCamera = () => {
-    stopCamera();
-    setCameraFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
   };
 
   // ------------------- Logout -------------------
@@ -75,7 +73,12 @@ export default function StudentLogin() {
       }
     } catch (err) {
       console.error("Login error:", err.response?.data || err.message);
-      alert('Login error: ' + (err.response?.data?.error || err.message));
+      const errorMsg =
+        err.response?.data?.error?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Unknown error";
+      alert('Login error: ' + errorMsg);
     }
   };
 
@@ -108,7 +111,11 @@ export default function StudentLogin() {
           setStatus('✅ Face verified! Moving to QR scan...');
           setFaceBorderColor('limegreen');
           stopCamera();
-          setTimeout(() => proceedToQrScan(), 100); // switch to QR scan
+          setTimeout(() => {
+            // Set camera mode based on device
+            setCameraFacingMode(isMobile ? 'environment' : 'user');
+            setStep('qr');
+          }, 1000);
         } else {
           setStatus('❌ Face not matched, retrying...');
           setFaceBorderColor('red');
@@ -125,21 +132,9 @@ export default function StudentLogin() {
     };
 
     verifyFace();
+
     return () => clearTimeout(retryTimeout);
-  }, [step, loggedUser]);
-
-  // ------------------- Proceed to QR -------------------
-  const proceedToQrScan = () => {
-    // stop any camera
-    stopCamera();
-
-    // set camera for QR scanning
-    if (isMobile) setCameraFacingMode('environment'); // back camera
-    else setCameraFacingMode('user'); // front for laptop
-
-    // wait a tiny bit before showing QR
-    setTimeout(() => setStep('qr'), 100);
-  };
+  }, [step, loggedUser, isMobile]);
 
   // ------------------- QR Scan -------------------
   const handleScan = async (data) => {
@@ -152,7 +147,6 @@ export default function StudentLogin() {
         userId: loggedUser.userId,
         sessionId: qrText,
       });
-
       if (res.data.success) {
         setStatus('✅ Attendance marked');
         setQrBorderColor('limegreen');
@@ -171,13 +165,6 @@ export default function StudentLogin() {
 
   const handleError = (err) => console.error('QR Scanner error:', err);
 
-  // ------------------- Auto camera start -------------------
-  useEffect(() => {
-    if (step === 'face' || step === 'qr') startCamera();
-    return () => stopCamera();
-  }, [step, cameraFacingMode]);
-
-  // ------------------- Render -------------------
   return (
     <div style={{ padding: 20, position: 'relative' }}>
       <h3>Student Login & Attendance</h3>
@@ -274,7 +261,7 @@ export default function StudentLogin() {
           <p>Step: Scan Teacher QR to mark attendance</p>
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
             <QrScanner
-              key={cameraFacingMode} // important to force remount for new camera
+              key={cameraFacingMode + Date.now()} // force remount to switch camera
               delay={300}
               style={{ width: '100%' }}
               onError={handleError}
