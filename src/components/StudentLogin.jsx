@@ -31,18 +31,27 @@ export default function StudentLogin() {
       alert('Cannot access camera: ' + err.message);
     }
   };
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
+  
+stopCamera();
+setStep('qr'); // move to QR step first
+setTimeout(async () => {
+  // Wait a bit and start QR camera with correct facing
+  setCameraFacingMode(isMobile ? 'environment' : 'user');
+  if (videoRef.current) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: isMobile ? 'environment' : 'user' }
+      });
+      streamRef.current = stream;
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+    } catch (err) {
+      console.error('Cannot open QR camera:', err);
+      setStatus('❌ Cannot access camera for QR scan');
     }
-    if (videoRef.current) videoRef.current.srcObject = null;
-  };
+  }
+}, 500); // half-second delay for mobile browser
 
-  const swapCamera = () => {
-    setCameraFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
-  };
 
   // ------------------- Logout -------------------
   const handleLogout = () => {
