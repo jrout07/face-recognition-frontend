@@ -3,7 +3,7 @@ import axios from "axios";
 
 // Create an Axios instance for your backend
 const api = axios.create({
-  baseURL: "http://localhost:5002", // your backend URL
+  baseURL: "https://face-recognition-attendance-project.onrender.com", // your backend URL
   headers: {
     "Content-Type": "application/json",
   },
