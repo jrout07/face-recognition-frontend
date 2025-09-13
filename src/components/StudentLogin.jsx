@@ -1,30 +1,32 @@
 import React, { useRef, useState, useEffect } from 'react';
+import QrScanner from 'react-qr-scanner';
 import api from './api';
-import { BrowserMultiFormatReader } from '@zxing/browser';
 
 export default function StudentLogin() {
   const [form, setForm] = useState({ userId: '', password: '' });
   const [loggedUser, setLoggedUser] = useState(null);
   const [step, setStep] = useState('login'); // login -> face -> qr
   const [status, setStatus] = useState('');
+  const [sessionId, setSessionId] = useState('');
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
+  const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front by default
 
   const videoRef = useRef(null);
-  const qrCodeReader = useRef(null);
   const streamRef = useRef(null);
 
-  const startCamera = async (facingMode = 'user') => {
-    if (!videoRef.current) return;
-    stopCamera();
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
+  // ------------------- Camera -------------------
+  const startCamera = async () => {
+    if (!videoRef.current) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode }
+        video: { facingMode: cameraFacingMode }
       });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
-      await videoRef.current.play();
+      videoRef.current.play();
     } catch (err) {
       alert('Cannot access camera: ' + err.message);
     }
@@ -38,17 +40,31 @@ export default function StudentLogin() {
     if (videoRef.current) videoRef.current.srcObject = null;
   };
 
+  const swapCamera = () => {
+    stopCamera();
+    setCameraFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
+  };
+
+  // Auto-start camera when entering face or QR step
+  useEffect(() => {
+    if (step === 'face' || step === 'qr') startCamera();
+    return () => stopCamera();
+  }, [step, cameraFacingMode]);
+
+  // ------------------- Logout -------------------
   const handleLogout = () => {
     stopCamera();
-    if (qrCodeReader.current) qrCodeReader.current.reset();
     setLoggedUser(null);
     setStep('login');
     setForm({ userId: '', password: '' });
     setStatus('');
+    setSessionId('');
     setFaceBorderColor('gray');
     setQrBorderColor('gray');
+    setCameraFacingMode('user');
   };
 
+  // ------------------- Login -------------------
   const handleLogin = async () => {
     if (!form.userId || !form.password) return alert('Enter userId and password');
     try {
@@ -62,8 +78,12 @@ export default function StudentLogin() {
         alert(res.data.error || 'Login failed');
       }
     } catch (err) {
-      console.error(err);
-      alert('Login error: ' + (err.response?.data?.error || err.message));
+      const errorMsg =
+        err.response?.data?.error?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Unknown error";
+      alert('Login error: ' + errorMsg);
     }
   };
 
@@ -84,7 +104,7 @@ export default function StudentLogin() {
       canvas.width = videoRef.current.videoWidth;
       canvas.height = videoRef.current.videoHeight;
       canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
+      const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1]; // strip prefix
 
       try {
         const res = await api.post("/markAttendanceLive", {
@@ -93,12 +113,13 @@ export default function StudentLogin() {
         });
 
         if (res.data.success) {
-          setStatus('✅ Face verified! Scanning QR...');
+          setStatus('✅ Face verified! Moving to QR scan...');
           setFaceBorderColor('limegreen');
           stopCamera();
+
           setTimeout(() => {
             setStep('qr');
-            startCamera('environment'); // force back camera on mobile
+            setCameraFacingMode(isMobile ? 'environment' : 'user'); // back camera on mobile
           }, 1000);
         } else {
           setStatus('❌ Face not matched, retrying...');
@@ -107,7 +128,6 @@ export default function StudentLogin() {
           retryTimeout = setTimeout(verifyFace, 1500);
         }
       } catch (err) {
-        console.error(err);
         setStatus('❌ Face verification error, retrying...');
         setFaceBorderColor('red');
         setTimeout(() => setFaceBorderColor('gray'), 1000);
@@ -120,44 +140,36 @@ export default function StudentLogin() {
   }, [step, loggedUser]);
 
   // ------------------- QR Scan -------------------
-  useEffect(() => {
-    if (step !== 'qr' || !videoRef.current) return;
+  const handleScan = async (data) => {
+    if (!data) return;
+    const qrText = data.text || data;
+    setSessionId(qrText);
 
-    qrCodeReader.current = new BrowserMultiFormatReader();
+    try {
+      const res = await api.post("/attendance/mark", {
+        userId: loggedUser.userId,
+        sessionId: qrText,
+      });
 
-    qrCodeReader.current.decodeFromVideoDevice(null, videoRef.current, async (result, err) => {
-      if (result) {
-        const qrText = result.getText();
-        try {
-          const res = await api.post("/attendance/mark", {
-            userId: loggedUser.userId,
-            sessionId: qrText,
-          });
-
-          if (res.data.success) {
-            setStatus('✅ Attendance marked');
-            setQrBorderColor('limegreen');
-          } else {
-            setStatus('❌ Attendance failed');
-            setQrBorderColor('red');
-          }
-
-          setTimeout(() => setQrBorderColor('gray'), 1500);
-        } catch (err) {
-          console.error(err);
-          setStatus('❌ QR attendance error');
-          setQrBorderColor('red');
-          setTimeout(() => setQrBorderColor('gray'), 1500);
-        }
+      if (res.data.success) {
+        setStatus('✅ Attendance marked');
+        setQrBorderColor('limegreen');
+      } else {
+        setStatus('❌ Attendance failed');
+        setQrBorderColor('red');
       }
-    });
+      setTimeout(() => setQrBorderColor('gray'), 1500);
+    } catch (err) {
+      console.error("QR scan error:", err.response?.data || err.message);
+      setStatus('❌ QR attendance error');
+      setQrBorderColor('red');
+      setTimeout(() => setQrBorderColor('gray'), 1500);
+    }
+  };
 
-    return () => {
-      if (qrCodeReader.current) qrCodeReader.current.reset();
-      stopCamera();
-    };
-  }, [step, loggedUser]);
+  const handleError = (err) => console.error('QR Scanner error:', err);
 
+  // ------------------- UI -------------------
   return (
     <div style={{ padding: 20, position: 'relative' }}>
       <h3>Student Login & Attendance</h3>
@@ -217,18 +229,16 @@ export default function StudentLogin() {
         </div>
       )}
 
-      {(step === 'face' || step === 'qr') && (
+      {step === 'face' && (
         <div style={{ position: 'relative', width: 320, height: 240 }}>
+          <p>Step: Face Verification (Automatic)</p>
           <video
             ref={videoRef}
             autoPlay
             playsInline
             width="320"
             height="240"
-            style={{
-              border: `5px solid ${step === 'face' ? faceBorderColor : qrBorderColor}`,
-              borderRadius: 5
-            }}
+            style={{ border: `5px solid ${faceBorderColor}`, borderRadius: 5 }}
           />
           <div
             style={{
@@ -248,6 +258,22 @@ export default function StudentLogin() {
           >
             {status}
           </div>
+        </div>
+      )}
+
+      {step === 'qr' && (
+        <div style={{ position: 'relative', width: 320 }}>
+          <p>Step: Scan Teacher QR to mark attendance</p>
+          <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
+            <QrScanner
+              delay={300}
+              style={{ width: '100%' }}
+              onError={handleError}
+              onScan={handleScan}
+              facingMode={cameraFacingMode}
+            />
+          </div>
+          <p>{status}</p>
         </div>
       )}
     </div>
