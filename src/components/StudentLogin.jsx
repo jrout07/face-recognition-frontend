@@ -10,7 +10,7 @@ export default function StudentLogin() {
   const [sessionId, setSessionId] = useState('');
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
-  const [qrKey, setQrKey] = useState(0); 
+  const [qrKey, setQrKey] = useState(0);
   const [scannerActive, setScannerActive] = useState(true);
 
   const videoRef = useRef(null);
@@ -98,17 +98,16 @@ export default function StudentLogin() {
     }
   };
 
-  /* ---------------- Face Verification with Smile ---------------- */
+  /* ---------------- Face Verification ---------------- */
   useEffect(() => {
     if (step !== "face" || !loggedUser) return;
     let retryInterval;
-    let smileDetected = false;
 
-    const checkSmile = async () => {
+    const checkFace = async () => {
       if (!videoRef.current) return;
 
       if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
-        videoRef.current.onloadedmetadata = () => checkSmile();
+        videoRef.current.onloadedmetadata = () => checkFace();
         return;
       }
 
@@ -119,52 +118,36 @@ export default function StudentLogin() {
       const imageBase64 = canvas.toDataURL("image/jpeg").split(",")[1];
 
       try {
-        const res = await api.post("/checkSmile", { imageBase64 });
+        const faceRes = await api.post("/markAttendanceLive", {
+          userId: loggedUser.userId,
+          imageBase64,
+        });
 
-        if (res.data.success) {
-          if (res.data.smile && res.data.confidence > 80) {
-            smileDetected = true;
-            setStatus("😀 Smile detected! Now verifying your face...");
-          } else {
-            setStatus("🙂 Please smile broadly to continue...");
-          }
+        if (faceRes.data.success) {
+          setStatus("✅ Face verified! Moving to QR...");
+          setFaceBorderColor("limegreen");
+          stopCamera();
 
-          if (smileDetected) {
-            const faceRes = await api.post("/markAttendanceLive", {
-              userId: loggedUser.userId,
-              imageBase64,
-              smileVerified: true, // ✅ no sessionId here
-            });
+          setTimeout(() => {
+            useBackCamera();
+            setStep("qr");
+            setScannerActive(true);
+          }, 1000);
 
-            if (faceRes.data.success) {
-              setStatus("✅ Smile + Face verified! Moving to QR...");
-              setFaceBorderColor("limegreen");
-              stopCamera();
-
-              setTimeout(() => {
-                useBackCamera();
-                setStep("qr");
-                setScannerActive(true);
-              }, 1000);
-
-              clearInterval(retryInterval);
-            } else {
-              setStatus("❌ Face not matched after smile, retrying...");
-              setFaceBorderColor("red");
-              setTimeout(() => setFaceBorderColor("gray"), 1000);
-            }
-          }
+          clearInterval(retryInterval);
         } else {
-          setStatus("⚠️ No face detected, adjust camera...");
+          setStatus("❌ Face not matched, retrying...");
+          setFaceBorderColor("red");
+          setTimeout(() => setFaceBorderColor("gray"), 1000);
         }
       } catch (err) {
-        console.error("Smile check error:", err);
-        setStatus("⚠️ Error checking smile...");
+        console.error("Face check error:", err);
+        setStatus("⚠️ Error verifying face...");
       }
     };
 
     startCamera("user").then(() => {
-      retryInterval = setInterval(checkSmile, 1500);
+      retryInterval = setInterval(checkFace, 2000); // every 2 sec
     });
 
     return () => clearInterval(retryInterval);
@@ -302,7 +285,7 @@ export default function StudentLogin() {
 
       {step === 'face' && (
         <div style={{ position: 'relative', width: 320, height: 240 }}>
-          <p>Step: Face Verification (Smile Required)</p>
+          <p>Step: Face Verification</p>
           <video
             ref={videoRef}
             autoPlay
