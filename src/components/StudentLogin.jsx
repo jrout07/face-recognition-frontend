@@ -15,7 +15,6 @@ export default function StudentLogin() {
   const streamRef = useRef(null);
 
   // Camera state for QR
-  const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState(null);
 
   /* ------------------- Camera Helpers ------------------- */
@@ -47,38 +46,30 @@ export default function StudentLogin() {
     }
   };
 
-  /* ------------------- QR Camera Setup ------------------- */
+  /* ------------------- Lock to Back Camera ------------------- */
   useEffect(() => {
     async function loadCameras() {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
-        setCameras(videoDevices);
 
-        // Default to back camera if available
+        // 🔒 Always choose back camera if available
         const backCam = videoDevices.find(d =>
           d.label.toLowerCase().includes('back') ||
           d.label.toLowerCase().includes('rear')
         );
-        setSelectedCamera(backCam ? backCam.deviceId : videoDevices[0]?.deviceId);
+
+        if (backCam) {
+          setSelectedCamera(backCam.deviceId);
+        } else if (videoDevices.length > 0) {
+          setSelectedCamera(videoDevices[0].deviceId); // fallback
+        }
       } catch (err) {
         console.error('Error loading cameras:', err);
       }
     }
     loadCameras();
   }, []);
-
-  const useBackCamera = () => {
-    if (cameras.length === 0) return;
-    const backCam = cameras.find(d =>
-      d.label.toLowerCase().includes('back') ||
-      d.label.toLowerCase().includes('rear')
-    );
-    if (backCam) {
-      setSelectedCamera(backCam.deviceId);
-      setQrKey(prev => prev + 1); // 🔥 force remount
-    }
-  };
 
   /* ------------------- Login ------------------- */
   const handleLogin = async () => {
@@ -132,9 +123,8 @@ export default function StudentLogin() {
           stopCamera();
 
           setTimeout(() => {
-            useBackCamera();              // 🔥 auto switch to back camera
-            setQrKey(prev => prev + 1);   // 🔥 force reload scanner
-            setStep('qr');
+            setQrKey(prev => prev + 1);   // 🔥 reload scanner
+            setStep('qr');                // move to QR step
           }, 1000);
         } else {
           setStatus('❌ Face not matched, retrying...');
