@@ -10,10 +10,13 @@ export default function StudentLogin() {
   const [sessionId, setSessionId] = useState('');
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
-  const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front by default
   const [qrKey, setQrKey] = useState(0); // to force QR remount
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+
+  // Camera state for QR
+  const [cameras, setCameras] = useState([]);
+  const [selectedCamera, setSelectedCamera] = useState(null);
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
@@ -26,12 +29,12 @@ export default function StudentLogin() {
     if (videoRef.current) videoRef.current.srcObject = null;
   };
 
-  const startCamera = async () => {
+  const startCamera = async (facingMode = 'user') => {
     if (!videoRef.current) return;
     stopCamera();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: cameraFacingMode },
+        video: { facingMode },
       });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
@@ -41,11 +44,45 @@ export default function StudentLogin() {
     }
   };
 
-  const swapCamera = async () => {
-    // Toggle camera
-    const newFacing = cameraFacingMode === 'user' ? 'environment' : 'user';
-    setCameraFacingMode(newFacing);
-    setQrKey(prev => prev + 1); // force QR scanner remount
+  // ------------------- QR Camera Setup -------------------
+  useEffect(() => {
+    async function loadCameras() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+        setCameras(videoDevices);
+
+        // Prefer back camera if available
+        const backCam = videoDevices.find(d =>
+          d.label.toLowerCase().includes('back') ||
+          d.label.toLowerCase().includes('rear')
+        );
+        setSelectedCamera(backCam ? backCam.deviceId : videoDevices[0]?.deviceId);
+      } catch (err) {
+        console.error('Error loading cameras:', err);
+      }
+    }
+    loadCameras();
+  }, []);
+
+  const swapCamera = () => {
+    if (cameras.length < 2) return; // Only one camera
+    const currentIndex = cameras.findIndex(c => c.deviceId === selectedCamera);
+    const nextIndex = (currentIndex + 1) % cameras.length;
+    setSelectedCamera(cameras[nextIndex].deviceId);
+    setQrKey(prev => prev + 1); // force remount
+  };
+
+  const useBackCamera = () => {
+    if (cameras.length === 0) return;
+    const backCam = cameras.find(d =>
+      d.label.toLowerCase().includes('back') ||
+      d.label.toLowerCase().includes('rear')
+    );
+    if (backCam) {
+      setSelectedCamera(backCam.deviceId);
+      setQrKey(prev => prev + 1); // force remount
+    }
   };
 
   // ------------------- Login -------------------
@@ -100,8 +137,7 @@ export default function StudentLogin() {
           stopCamera();
 
           setTimeout(() => {
-            setCameraFacingMode(isMobile ? 'environment' : 'user');
-            setQrKey(prev => prev + 1); // remount QR scanner
+            useBackCamera(); // auto switch to back camera
             setStep('qr');
           }, 1000);
         } else {
@@ -119,10 +155,10 @@ export default function StudentLogin() {
       }
     };
 
-    startCamera().then(() => verifyFace());
+    startCamera('user').then(() => verifyFace());
 
     return () => clearTimeout(retryTimeout);
-  }, [step, loggedUser, cameraFacingMode]);
+  }, [step, loggedUser]);
 
   // ------------------- QR Scan -------------------
   const handleScan = async data => {
@@ -163,7 +199,6 @@ export default function StudentLogin() {
     setSessionId('');
     setFaceBorderColor('gray');
     setQrBorderColor('gray');
-    setCameraFacingMode('user');
   };
 
   // ------------------- Render -------------------
@@ -274,12 +309,14 @@ export default function StudentLogin() {
           </button>
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
             <QrScanner
-              key={qrKey} // remount to apply new camera
+              key={qrKey}
               delay={300}
               style={{ width: '100%' }}
               onError={handleError}
               onScan={handleScan}
-              facingMode={cameraFacingMode}
+              constraints={{
+                video: selectedCamera ? { deviceId: { exact: selectedCamera } } : undefined,
+              }}
             />
           </div>
           <p>{status}</p>
