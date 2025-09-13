@@ -10,15 +10,16 @@ export default function StudentLogin() {
   const [sessionId, setSessionId] = useState('');
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
-  const [qrKey, setQrKey] = useState(0); // to force QR remount
+  const [qrKey, setQrKey] = useState(0); // force QR remount
+  const [scannerActive, setScannerActive] = useState(true); // ✅ control QR scanner
+
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
-  // Camera state for QR
   const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState(null);
 
-  // ------------------- Camera Helpers -------------------
+  /* ---------------- Camera Helpers ---------------- */
   const stopCamera = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
@@ -42,7 +43,7 @@ export default function StudentLogin() {
     }
   };
 
-  // ------------------- QR Camera Setup -------------------
+  /* ---------------- QR Camera Setup ---------------- */
   useEffect(() => {
     async function loadCameras() {
       try {
@@ -50,7 +51,6 @@ export default function StudentLogin() {
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
         setCameras(videoDevices);
 
-        // Prefer back camera if available
         const backCam = videoDevices.find(d =>
           d.label.toLowerCase().includes('back') ||
           d.label.toLowerCase().includes('rear')
@@ -64,26 +64,25 @@ export default function StudentLogin() {
   }, []);
 
   const swapCamera = () => {
-    if (cameras.length < 2) return; // Only one camera
+    if (cameras.length < 2) return;
     const currentIndex = cameras.findIndex(c => c.deviceId === selectedCamera);
     const nextIndex = (currentIndex + 1) % cameras.length;
     setSelectedCamera(cameras[nextIndex].deviceId);
-    setQrKey(prev => prev + 1); // force remount
+    setQrKey(prev => prev + 1); // re-mount scanner
   };
 
   const useBackCamera = () => {
-    if (cameras.length === 0) return;
     const backCam = cameras.find(d =>
       d.label.toLowerCase().includes('back') ||
       d.label.toLowerCase().includes('rear')
     );
     if (backCam) {
       setSelectedCamera(backCam.deviceId);
-      setQrKey(prev => prev + 1); // force remount
+      setQrKey(prev => prev + 1);
     }
   };
 
-  // ------------------- Login -------------------
+  /* ---------------- Login ---------------- */
   const handleLogin = async () => {
     if (!form.userId || !form.password) return alert('Enter userId and password');
     try {
@@ -95,16 +94,11 @@ export default function StudentLogin() {
         setStatus('Initializing camera...');
       } else alert(res.data.error || 'Login failed');
     } catch (err) {
-      const errorMsg =
-        err.response?.data?.error?.message ||
-        err.response?.data?.error ||
-        err.message ||
-        'Unknown error';
-      alert('Login error: ' + errorMsg);
+      alert('Login error: ' + (err.response?.data?.error || err.message));
     }
   };
 
-  // ------------------- Face Verification -------------------
+  /* ---------------- Face Verification ---------------- */
   useEffect(() => {
     if (step !== 'face' || !loggedUser) return;
     let retryTimeout;
@@ -135,8 +129,9 @@ export default function StudentLogin() {
           stopCamera();
 
           setTimeout(() => {
-            useBackCamera(); // auto switch to back camera
+            useBackCamera();
             setStep('qr');
+            setScannerActive(true); // ✅ enable scanner at QR step
           }, 1000);
         } else {
           setStatus('❌ Face not matched, retrying...');
@@ -154,21 +149,29 @@ export default function StudentLogin() {
     };
 
     startCamera('user').then(() => verifyFace());
-
     return () => clearTimeout(retryTimeout);
   }, [step, loggedUser]);
 
-  // ------------------- QR Scan -------------------
+  /* ---------------- QR Scan ---------------- */
   const handleScan = async data => {
-    if (!data) return;
+    if (!data || !scannerActive) return; // ✅ ignore if scanner is disabled
 
     try {
       const qrText = data.text || data;
 
-      // ✅ Parse Teacher QR (must be JSON with sessionId & qrToken)
-      const parsed = JSON.parse(qrText);
+      let parsed;
+      try {
+        parsed = JSON.parse(qrText);
+      } catch {
+        setStatus('⚠️ Invalid QR format');
+        setQrBorderColor('red');
+        return;
+      }
+
       if (!parsed.sessionId || !parsed.qrToken) {
-        throw new Error('Invalid QR code');
+        setStatus('⚠️ Expired or invalid QR code');
+        setQrBorderColor('red');
+        return;
       }
 
       setSessionId(parsed.sessionId);
@@ -182,22 +185,23 @@ export default function StudentLogin() {
       if (res.data.success) {
         setStatus('✅ Attendance marked');
         setQrBorderColor('limegreen');
+        setScannerActive(false); // ✅ stop further scans after success
       } else {
         setStatus('❌ ' + (res.data.error || 'Attendance failed'));
         setQrBorderColor('red');
       }
-      setTimeout(() => setQrBorderColor('gray'), 1500);
+      setTimeout(() => setQrBorderColor('gray'), 2000);
     } catch (err) {
       console.error('QR scan error:', err);
-      setStatus('❌ QR attendance error');
+      setStatus('⚠️ QR attendance error (maybe expired)');
       setQrBorderColor('red');
-      setTimeout(() => setQrBorderColor('gray'), 1500);
+      setTimeout(() => setQrBorderColor('gray'), 2000);
     }
   };
 
   const handleError = err => console.error('QR Scanner error:', err);
 
-  // ------------------- Logout -------------------
+  /* ---------------- Logout ---------------- */
   const handleLogout = () => {
     stopCamera();
     setLoggedUser(null);
@@ -207,9 +211,10 @@ export default function StudentLogin() {
     setSessionId('');
     setFaceBorderColor('gray');
     setQrBorderColor('gray');
+    setScannerActive(false); // ✅ reset scanner
   };
 
-  // ------------------- Render -------------------
+  /* ---------------- UI ---------------- */
   return (
     <div style={{ padding: 20, position: 'relative' }}>
       <h3>Student Login & Attendance</h3>
@@ -316,16 +321,18 @@ export default function StudentLogin() {
             Swap Camera
           </button>
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
-            <QrScanner
-              key={qrKey}
-              delay={300}
-              style={{ width: '100%' }}
-              onError={handleError}
-              onScan={handleScan}
-              constraints={{
-                video: selectedCamera ? { deviceId: { exact: selectedCamera } } : undefined,
-              }}
-            />
+            {scannerActive && ( // ✅ render only when active
+              <QrScanner
+                key={qrKey}
+                delay={400}
+                style={{ width: '100%' }}
+                onError={handleError}
+                onScan={handleScan}
+                constraints={{
+                  video: selectedCamera ? { deviceId: { exact: selectedCamera } } : undefined,
+                }}
+              />
+            )}
           </div>
           <p>{status}</p>
         </div>
