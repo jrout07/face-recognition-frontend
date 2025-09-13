@@ -5,7 +5,7 @@ export default function TeacherDashboard() {
   const [form, setForm] = useState({ teacherId: "", password: "" });
   const [logged, setLogged] = useState(false);
   const [faceVerified, setFaceVerified] = useState(false);
-  const [verificationFailed, setVerificationFailed] = useState(false);
+  const [verificationMsg, setVerificationMsg] = useState("");
   const [classId, setClassId] = useState("CLS1");
   const [qrData, setQrData] = useState("");
   const [qrCountdown, setQrCountdown] = useState(0);
@@ -58,7 +58,7 @@ export default function TeacherDashboard() {
     }
   };
 
-  /* ---------------- Auto Face Verify ---------------- */
+  /* ---------------- Auto Face Verify (with Smile) ---------------- */
   const autoFaceVerify = async () => {
     if (!videoRef.current || faceVerified) return;
 
@@ -69,23 +69,35 @@ export default function TeacherDashboard() {
     const imageBase64 = canvas.toDataURL("image/jpeg");
 
     try {
+      // Step 1: checkSmile
+      const smileRes = await api.post("/checkSmile", { imageBase64 });
+      if (!smileRes.data.success || !smileRes.data.smile || smileRes.data.confidence < 80) {
+        setVerificationMsg("🙂 Please SMILE to verify");
+        faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000);
+        return;
+      }
+
+      setVerificationMsg("😃 Smile detected! Verifying face...");
+
+      // Step 2: markAttendanceLive with smileVerified
       const res = await api.post("/markAttendanceLive", {
         userId: form.teacherId,
         imageBase64,
+        smileVerified: true,
       });
 
       if (res.data.success) {
         setFaceVerified(true);
-        setVerificationFailed(false);
+        setVerificationMsg("✅ Smile & Face verified!");
         stopCamera();
         fetchStudents();
         await createSession();
       } else {
-        setVerificationFailed(true);
+        setVerificationMsg("❌ Face not matched. Try again.");
         faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000);
       }
     } catch (err) {
-      setVerificationFailed(true);
+      setVerificationMsg("⚠️ Error verifying face. Retrying...");
       faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000);
     }
   };
@@ -131,19 +143,14 @@ export default function TeacherDashboard() {
       if (!sessionRef.current) return;
 
       try {
-        const res = await api.post("/teacher/refreshQr", {
-          sessionId: sessionRef.current.sessionId,
-        });
-
+        const res = await api.get(`/teacher/getSession/${classId}`);
         if (res.data.success) {
-          sessionRef.current.qrToken = res.data.qrToken;
+          sessionRef.current.qrToken = res.data.session.qrToken;
           setQrData(JSON.stringify({
             sessionId: sessionRef.current.sessionId,
-            qrToken: res.data.qrToken
+            qrToken: res.data.session.qrToken
           }));
-          setQrCountdown(600); // reset 10min countdown
-        } else {
-          console.warn("QR refresh failed");
+          setQrCountdown(600);
         }
       } catch (err) {
         console.error("QR refresh error:", err);
@@ -160,7 +167,7 @@ export default function TeacherDashboard() {
       setQrCountdown(prev => {
         if (prev <= 1) {
           clearInterval(countdownRef.current);
-          return 0; // expired but keep last QR
+          return 0;
         }
         return prev - 1;
       });
@@ -215,7 +222,7 @@ export default function TeacherDashboard() {
     stopCamera();
     setLogged(false);
     setFaceVerified(false);
-    setVerificationFailed(false);
+    setVerificationMsg("");
     setForm({ teacherId: "", password: "" });
     setQrData("");
     setQrCountdown(0);
@@ -285,18 +292,23 @@ export default function TeacherDashboard() {
 
             <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 15, alignItems: "center" }}>
               {!faceVerified && (
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  style={{
-                    width: "100%",
-                    maxWidth: 320,
-                    border: verificationFailed ? "4px solid #e74c3c" : "1px solid #ccc",
-                    borderRadius: 12,
-                    backgroundColor: "#000",
-                  }}
-                />
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    style={{
+                      width: "100%",
+                      maxWidth: 320,
+                      border: "2px solid #ccc",
+                      borderRadius: 12,
+                      backgroundColor: "#000",
+                    }}
+                  />
+                  <p style={{ color: "#555", fontWeight: "bold" }}>
+                    {verificationMsg || "🙂 Please smile to verify"}
+                  </p>
+                </>
               )}
 
               <input
@@ -395,9 +407,6 @@ export default function TeacherDashboard() {
                   </button>
                 </div>
               )}
-
-              {!faceVerified && verificationFailed && <p style={{ color: "#e74c3c", fontWeight: "bold" }}>Face not matched! Try again.</p>}
-              {!faceVerified && !verificationFailed && <p style={{ color: "#555" }}>Verifying face...</p>}
             </div>
 
             {students.length > 0 && (
