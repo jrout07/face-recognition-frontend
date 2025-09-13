@@ -18,8 +18,6 @@ export default function StudentLogin() {
   const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState(null);
 
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
   // ------------------- Camera Helpers -------------------
   const stopCamera = () => {
     if (streamRef.current) {
@@ -52,7 +50,7 @@ export default function StudentLogin() {
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
         setCameras(videoDevices);
 
-        // Prefer back camera if available
+        // Default to back camera if available
         const backCam = videoDevices.find(d =>
           d.label.toLowerCase().includes('back') ||
           d.label.toLowerCase().includes('rear')
@@ -64,14 +62,6 @@ export default function StudentLogin() {
     }
     loadCameras();
   }, []);
-
-  const swapCamera = () => {
-    if (cameras.length < 2) return; // Only one camera
-    const currentIndex = cameras.findIndex(c => c.deviceId === selectedCamera);
-    const nextIndex = (currentIndex + 1) % cameras.length;
-    setSelectedCamera(cameras[nextIndex].deviceId);
-    setQrKey(prev => prev + 1); // force remount
-  };
 
   const useBackCamera = () => {
     if (cameras.length === 0) return;
@@ -293,20 +283,6 @@ export default function StudentLogin() {
       {step === 'qr' && (
         <div style={{ position: 'relative', width: 320 }}>
           <p>Step: Scan Teacher QR to mark attendance</p>
-          <button
-            onClick={swapCamera}
-            style={{
-              marginBottom: 5,
-              padding: '5px 10px',
-              borderRadius: 5,
-              backgroundColor: '#007bff',
-              color: '#fff',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            Swap Camera
-          </button>
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
             <QrScanner
               key={qrKey}
