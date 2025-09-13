@@ -1,5 +1,4 @@
 import React, { useRef, useState, useEffect } from 'react';
-import axios from 'axios';
 import api from './api';
 
 export default function RegisterPage({ onRedirectToLogin }) {
@@ -50,7 +49,7 @@ export default function RegisterPage({ onRedirectToLogin }) {
 
     setLoading(true);
     try {
-      const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/registerUserLive`, {
+      const res = await api.post('/registerUserLive', {
         ...form,
         imageBase64: captured,
       });
