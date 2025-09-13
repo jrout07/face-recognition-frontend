@@ -4,6 +4,7 @@ import RegisterPage from './components/RegisterPage';
 import StudentLogin from './components/StudentLogin';
 import TeacherDashboard from './components/TeacherDashboard';
 import AdminPage from './components/AdminPage';
+import API from './api'; // <-- Import API
 
 export default function App() {
   const [role, setRole] = useState(null);
@@ -89,10 +90,10 @@ export default function App() {
           transition: 'all 0.3s',
         }}
       >
-        {role === 'register' && <RegisterPage />}
-        {role === 'student' && <StudentLogin setRole={setRole} />}
-        {role === 'teacher' && <TeacherDashboard />}
-        {role === 'admin' && <AdminPage />}
+        {role === 'register' && <RegisterPage api={API} />}
+        {role === 'student' && <StudentLogin api={API} setRole={setRole} />}
+        {role === 'teacher' && <TeacherDashboard api={API} />}
+        {role === 'admin' && <AdminPage api={API} />}
         {!role && <p style={{ color: '#666', fontSize: '1.1rem' }}>Select a role to continue.</p>}
       </div>
 
