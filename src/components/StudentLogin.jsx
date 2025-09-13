@@ -7,20 +7,23 @@ export default function StudentLogin() {
   const [loggedUser, setLoggedUser] = useState(null);
   const [step, setStep] = useState('login'); // login -> face -> qr
   const [status, setStatus] = useState('');
-  const [sessionId, setSessionId] = useState('');
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
   const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front by default
+  const [qrKey, setQrKey] = useState(0); // to force QR scanner reload
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+
+  // Detect mobile devices
+  const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
   // ------------------- Camera -------------------
   const startCamera = async () => {
     if (!videoRef.current) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: cameraFacingMode }
+        video: { facingMode: cameraFacingMode },
       });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
@@ -32,20 +35,15 @@ export default function StudentLogin() {
 
   const stopCamera = () => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
     if (videoRef.current) videoRef.current.srcObject = null;
   };
 
-  const swapCamera = () => {
-    stopCamera();
-    setCameraFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
-  };
-
   // Auto-start camera when entering face step
   useEffect(() => {
-    if (step === 'face') startCamera();
+    if (step === 'face' || step === 'qr') startCamera();
     return () => stopCamera();
   }, [step, cameraFacingMode]);
 
@@ -56,7 +54,6 @@ export default function StudentLogin() {
     setStep('login');
     setForm({ userId: '', password: '' });
     setStatus('');
-    setSessionId('');
     setFaceBorderColor('gray');
     setQrBorderColor('gray');
     setCameraFacingMode('user');
@@ -66,7 +63,7 @@ export default function StudentLogin() {
   const handleLogin = async () => {
     if (!form.userId || !form.password) return alert('Enter userId and password');
     try {
-      const res = await api.post("/login", form);
+      const res = await api.post('/login', form);
       if (res.data.success && res.data.role === 'student') {
         setLoggedUser(res.data);
         setStep('face');
@@ -76,20 +73,14 @@ export default function StudentLogin() {
         alert(res.data.error || 'Login failed');
       }
     } catch (err) {
-      console.error("Login error:", err.response?.data || err.message);
-      const errorMsg =
-        err.response?.data?.error?.message ||
-        err.response?.data?.error ||
-        err.message ||
-        "Unknown error";
-      alert('Login error: ' + errorMsg);
+      console.error('Login error:', err.response?.data || err.message);
+      alert('Login error: ' + (err.response?.data?.error || err.message));
     }
   };
 
   // ------------------- Face Verification -------------------
   useEffect(() => {
     if (step !== 'face') return;
-
     let retryTimeout;
 
     const verifyFace = async () => {
@@ -106,7 +97,7 @@ export default function StudentLogin() {
       const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1]; // strip prefix
 
       try {
-        const res = await api.post("/markAttendanceLive", {
+        const res = await api.post('/markAttendanceLive', {
           userId: loggedUser.userId,
           imageBase64,
         });
@@ -117,7 +108,10 @@ export default function StudentLogin() {
           stopCamera();
           setTimeout(() => {
             setStep('qr');
-            swapCamera(); // switch to back camera for QR scan
+
+            // On mobile use back camera, on desktop keep front
+            setCameraFacingMode(isMobile ? 'environment' : 'user');
+            setQrKey((prev) => prev + 1); // reload QR scanner
           }, 1000);
         } else {
           setStatus('❌ Face not matched, retrying...');
@@ -126,7 +120,7 @@ export default function StudentLogin() {
           retryTimeout = setTimeout(verifyFace, 1500);
         }
       } catch (err) {
-        console.error("Face verification error:", err.response?.data || err.message);
+        console.error('Face verification error:', err.response?.data || err.message);
         setStatus('❌ Face verification error, retrying...');
         setFaceBorderColor('red');
         setTimeout(() => setFaceBorderColor('gray'), 1000);
@@ -135,7 +129,6 @@ export default function StudentLogin() {
     };
 
     verifyFace();
-
     return () => clearTimeout(retryTimeout);
   }, [step, loggedUser]);
 
@@ -149,15 +142,15 @@ export default function StudentLogin() {
     try {
       sessionData = JSON.parse(qrText); // Parse JSON from teacher QR
     } catch {
-      setStatus("❌ Invalid QR code");
-      setQrBorderColor("red");
-      setTimeout(() => setQrBorderColor("gray"), 1500);
+      setStatus('❌ Invalid QR code');
+      setQrBorderColor('red');
+      setTimeout(() => setQrBorderColor('gray'), 1500);
       return;
     }
 
     const attemptAttendance = async () => {
       try {
-        const res = await api.post("/attendance/mark", {
+        const res = await api.post('/attendance/mark', {
           userId: loggedUser.userId,
           sessionId: sessionData.sessionId,
           qrToken: sessionData.qrToken,
@@ -169,14 +162,14 @@ export default function StudentLogin() {
         } else {
           setStatus('❌ Attendance failed, retrying...');
           setQrBorderColor('red');
-          setTimeout(() => setQrBorderColor("gray"), 1500);
+          setTimeout(() => setQrBorderColor('gray'), 1500);
           setTimeout(attemptAttendance, 1500);
         }
       } catch (err) {
-        console.error("QR scan error:", err.response?.data || err.message);
+        console.error('QR scan error:', err.response?.data || err.message);
         setStatus('❌ QR error, retrying...');
         setQrBorderColor('red');
-        setTimeout(() => setQrBorderColor("gray"), 1500);
+        setTimeout(() => setQrBorderColor('gray'), 1500);
         setTimeout(attemptAttendance, 1500);
       }
     };
@@ -215,14 +208,14 @@ export default function StudentLogin() {
           <input
             placeholder="User ID"
             value={form.userId}
-            onChange={e => setForm({ ...form, userId: e.target.value })}
+            onChange={(e) => setForm({ ...form, userId: e.target.value })}
             style={{ padding: '8px', borderRadius: 5, border: '1px solid #ccc' }}
           />
           <input
             type="password"
             placeholder="Password"
             value={form.password}
-            onChange={e => setForm({ ...form, password: e.target.value })}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
             style={{ padding: '8px', borderRadius: 5, border: '1px solid #ccc' }}
           />
           <button
@@ -235,10 +228,7 @@ export default function StudentLogin() {
               color: 'white',
               fontWeight: 'bold',
               cursor: 'pointer',
-              transition: '0.2s'
             }}
-            onMouseOver={e => e.currentTarget.style.backgroundColor = '#218838'}
-            onMouseOut={e => e.currentTarget.style.backgroundColor = '#28a745'}
           >
             Login
           </button>
@@ -282,6 +272,7 @@ export default function StudentLogin() {
           <p>Step: Scan Teacher QR to mark attendance</p>
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
             <QrScanner
+              key={qrKey}
               delay={300}
               style={{ width: '100%' }}
               onError={handleError}
