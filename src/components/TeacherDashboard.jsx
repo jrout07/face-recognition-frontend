@@ -58,7 +58,7 @@ export default function TeacherDashboard() {
     }
   };
 
-  /* ---------------- Auto Face Verify (with Smile) ---------------- */
+  /* ---------------- Auto Face Verify (No Smile Required) ---------------- */
   const autoFaceVerify = async () => {
     if (!videoRef.current || faceVerified) return;
 
@@ -69,31 +69,21 @@ export default function TeacherDashboard() {
     const imageBase64 = canvas.toDataURL("image/jpeg");
 
     try {
-      // Step 1: checkSmile
-      const smileRes = await api.post("/checkSmile", { imageBase64 });
-      if (!smileRes.data.success || !smileRes.data.smile || smileRes.data.confidence < 80) {
-        setVerificationMsg("🙂 Please SMILE to verify");
-        faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000);
-        return;
-      }
-
-      setVerificationMsg("😃 Smile detected! Verifying face...");
-
-      // Step 2: markAttendanceLive with smileVerified
+      // Directly verify face
       const res = await api.post("/markAttendanceLive", {
         userId: form.teacherId,
         imageBase64,
-        smileVerified: true,
+        smileVerified: false, // ✅ no smile check
       });
 
       if (res.data.success) {
         setFaceVerified(true);
-        setVerificationMsg("✅ Smile & Face verified!");
+        setVerificationMsg("✅ Face verified!");
         stopCamera();
         fetchStudents();
         await createSession();
       } else {
-        setVerificationMsg("❌ Face not matched. Try again.");
+        setVerificationMsg("❌ Face not matched. Retrying...");
         faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000);
       }
     } catch (err) {
@@ -306,7 +296,7 @@ export default function TeacherDashboard() {
                     }}
                   />
                   <p style={{ color: "#555", fontWeight: "bold" }}>
-                    {verificationMsg || "🙂 Please smile to verify"}
+                    {verificationMsg || "🙂 Please look at the camera to verify"}
                   </p>
                 </>
               )}
