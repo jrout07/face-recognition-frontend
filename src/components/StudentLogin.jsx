@@ -10,8 +10,8 @@ export default function StudentLogin() {
   const [sessionId, setSessionId] = useState('');
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
-  const [qrKey, setQrKey] = useState(0); // force QR remount
-  const [scannerActive, setScannerActive] = useState(true); // ✅ control QR scanner
+  const [qrKey, setQrKey] = useState(0); 
+  const [scannerActive, setScannerActive] = useState(true);
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -68,7 +68,7 @@ export default function StudentLogin() {
     const currentIndex = cameras.findIndex(c => c.deviceId === selectedCamera);
     const nextIndex = (currentIndex + 1) % cameras.length;
     setSelectedCamera(cameras[nextIndex].deviceId);
-    setQrKey(prev => prev + 1); // re-mount scanner
+    setQrKey(prev => prev + 1);
   };
 
   const useBackCamera = () => {
@@ -97,88 +97,85 @@ export default function StudentLogin() {
       alert('Login error: ' + (err.response?.data?.error || err.message));
     }
   };
-/* ---------------- Face Verification with Smile ---------------- */
-useEffect(() => {
-  if (step !== "face" || !loggedUser) return;
-  let retryInterval;
-  let smileDetected = false;
 
-  const checkSmile = async () => {
-    if (!videoRef.current) return;
+  /* ---------------- Face Verification with Smile ---------------- */
+  useEffect(() => {
+    if (step !== "face" || !loggedUser) return;
+    let retryInterval;
+    let smileDetected = false;
 
-    if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
-      videoRef.current.onloadedmetadata = () => checkSmile();
-      return;
-    }
+    const checkSmile = async () => {
+      if (!videoRef.current) return;
 
-    const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    const imageBase64 = canvas.toDataURL("image/jpeg").split(",")[1];
-
-    try {
-      // Call backend -> AWS Rekognition Smile Detection
-      const res = await api.post("/checkSmile", { imageBase64 });
-
-      if (res.data.success) {
-        if (res.data.smile && res.data.confidence > 80) {
-          smileDetected = true;
-          setStatus("😀 Smile detected! Verifying face...");
-        } else {
-          setStatus("🙂 Please smile to continue...");
-        }
-
-        if (smileDetected) {
-          const faceRes = await api.post("/markAttendanceLive", {
-            userId: loggedUser.userId,
-            imageBase64,
-            smileVerified: true,
-            sessionId,
-          });
-
-          if (faceRes.data.success) {
-            setStatus("✅ Smile + Face verified! Moving to QR...");
-            setFaceBorderColor("limegreen");
-            stopCamera();
-
-            setTimeout(() => {
-              useBackCamera();
-              setStep("qr");
-              setScannerActive(true);
-            }, 1000);
-
-            clearInterval(retryInterval);
-          } else {
-            setStatus("❌ Face not matched after smile, retrying...");
-            setFaceBorderColor("red");
-            setTimeout(() => setFaceBorderColor("gray"), 1000);
-          }
-        }
-      } else {
-        setStatus("⚠️ No face detected, adjust camera...");
+      if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
+        videoRef.current.onloadedmetadata = () => checkSmile();
+        return;
       }
-    } catch (err) {
-      console.error("Smile check error:", err);
-      setStatus("⚠️ Error checking smile...");
-    }
-  };
 
-  startCamera("user").then(() => {
-    retryInterval = setInterval(checkSmile, 1500); // check every 1.5s
-  });
+      const canvas = document.createElement("canvas");
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      const imageBase64 = canvas.toDataURL("image/jpeg").split(",")[1];
 
-  return () => clearInterval(retryInterval);
-}, [step, loggedUser, sessionId]);
+      try {
+        const res = await api.post("/checkSmile", { imageBase64 });
 
+        if (res.data.success) {
+          if (res.data.smile && res.data.confidence > 80) {
+            smileDetected = true;
+            setStatus("😀 Smile detected! Now verifying your face...");
+          } else {
+            setStatus("🙂 Please smile broadly to continue...");
+          }
+
+          if (smileDetected) {
+            const faceRes = await api.post("/markAttendanceLive", {
+              userId: loggedUser.userId,
+              imageBase64,
+              smileVerified: true, // ✅ no sessionId here
+            });
+
+            if (faceRes.data.success) {
+              setStatus("✅ Smile + Face verified! Moving to QR...");
+              setFaceBorderColor("limegreen");
+              stopCamera();
+
+              setTimeout(() => {
+                useBackCamera();
+                setStep("qr");
+                setScannerActive(true);
+              }, 1000);
+
+              clearInterval(retryInterval);
+            } else {
+              setStatus("❌ Face not matched after smile, retrying...");
+              setFaceBorderColor("red");
+              setTimeout(() => setFaceBorderColor("gray"), 1000);
+            }
+          }
+        } else {
+          setStatus("⚠️ No face detected, adjust camera...");
+        }
+      } catch (err) {
+        console.error("Smile check error:", err);
+        setStatus("⚠️ Error checking smile...");
+      }
+    };
+
+    startCamera("user").then(() => {
+      retryInterval = setInterval(checkSmile, 1500);
+    });
+
+    return () => clearInterval(retryInterval);
+  }, [step, loggedUser]);
 
   /* ---------------- QR Scan ---------------- */
   const handleScan = async data => {
-    if (!data || !scannerActive) return; // ✅ ignore if scanner is disabled
+    if (!data || !scannerActive) return;
 
     try {
       const qrText = data.text || data;
-
       let parsed;
       try {
         parsed = JSON.parse(qrText);
@@ -205,15 +202,14 @@ useEffect(() => {
       if (res.data.success) {
         setStatus('✅ Attendance marked');
         setQrBorderColor('limegreen');
-        setScannerActive(false); // ✅ stop further scans after success
+        setScannerActive(false);
       } else if (res.data.error === "Attendance already marked") {
         setStatus('✅ You’ve already marked attendance');
         setQrBorderColor('limegreen');
-        setScannerActive(false); // ✅ also stop scanning again
+        setScannerActive(false);
       } else if (res.data.error?.toLowerCase().includes("expired")) {
         setStatus('⏳ QR expired, waiting for latest code...');
         setQrBorderColor('orange');
-        // ⚠️ Do NOT stop scanner — keep scanning until a fresh QR is detected
       } else {
         setStatus('❌ ' + (res.data.error || 'Attendance failed'));
         setQrBorderColor('red');
@@ -224,7 +220,6 @@ useEffect(() => {
       console.error('QR scan error:', err);
       setStatus('⚠️ QR error — maybe expired, waiting for refresh...');
       setQrBorderColor('orange');
-      // ⚠️ Keep scanner active automatically
     }
   };
 
@@ -233,7 +228,6 @@ useEffect(() => {
     console.error('QR Scanner error:', err);
     setStatus('⚠️ QR scanner error, please try again');
     setQrBorderColor('red');
-    // Don’t disable scanner → let it recover
   };
 
   /* ---------------- Logout ---------------- */
@@ -246,7 +240,7 @@ useEffect(() => {
     setSessionId('');
     setFaceBorderColor('gray');
     setQrBorderColor('gray');
-    setScannerActive(false); // ✅ reset scanner
+    setScannerActive(false);
   };
 
   /* ---------------- UI ---------------- */
@@ -308,7 +302,7 @@ useEffect(() => {
 
       {step === 'face' && (
         <div style={{ position: 'relative', width: 320, height: 240 }}>
-          <p>Step: Face Verification (Automatic)</p>
+          <p>Step: Face Verification (Smile Required)</p>
           <video
             ref={videoRef}
             autoPlay
