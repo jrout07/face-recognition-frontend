@@ -10,12 +10,10 @@ export default function StudentLogin() {
   const [sessionId, setSessionId] = useState('');
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
-  const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front by default
+  const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front camera by default
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  const qrRetryTimeoutRef = useRef(null);
-  const faceRetryTimeoutRef = useRef(null);
 
   // ------------------- Camera -------------------
   const startCamera = async () => {
@@ -40,22 +38,9 @@ export default function StudentLogin() {
     if (videoRef.current) videoRef.current.srcObject = null;
   };
 
-  const swapCamera = () => {
-    stopCamera();
-    setCameraFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
-  };
-
-  // Auto-start camera when entering face step
-  useEffect(() => {
-    if (step === 'face' || step === 'qr') startCamera();
-    return () => stopCamera();
-  }, [step, cameraFacingMode]);
-
   // ------------------- Logout -------------------
   const handleLogout = () => {
     stopCamera();
-    clearTimeout(qrRetryTimeoutRef.current);
-    clearTimeout(faceRetryTimeoutRef.current);
     setLoggedUser(null);
     setStep('login');
     setForm({ userId: '', password: '' });
@@ -94,10 +79,12 @@ export default function StudentLogin() {
   useEffect(() => {
     if (step !== 'face') return;
 
+    let retryTimeout;
+
     const verifyFace = async () => {
       if (!videoRef.current || !videoRef.current.videoWidth || !videoRef.current.videoHeight) {
         setStatus('❌ Video not ready, retrying...');
-        faceRetryTimeoutRef.current = setTimeout(verifyFace, 1500);
+        retryTimeout = setTimeout(verifyFace, 1500);
         return;
       }
 
@@ -105,7 +92,7 @@ export default function StudentLogin() {
       canvas.width = videoRef.current.videoWidth;
       canvas.height = videoRef.current.videoHeight;
       canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
+      const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1]; // strip prefix
 
       try {
         const res = await api.post("/markAttendanceLive", {
@@ -117,33 +104,36 @@ export default function StudentLogin() {
           setStatus('✅ Face verified! Moving to QR scan...');
           setFaceBorderColor('limegreen');
           stopCamera();
+
+          // Switch to QR step and back camera after a short delay
           setTimeout(() => {
             setStep('qr');
-            setCameraFacingMode('environment'); // back camera for mobile
+            setCameraFacingMode('environment'); // back camera
           }, 1000);
+
         } else {
           setStatus('❌ Face not matched, retrying...');
           setFaceBorderColor('red');
           setTimeout(() => setFaceBorderColor('gray'), 1000);
-          faceRetryTimeoutRef.current = setTimeout(verifyFace, 1500);
+          retryTimeout = setTimeout(verifyFace, 1500);
         }
       } catch (err) {
         console.error("Face verification error:", err.response?.data || err.message);
         setStatus('❌ Face verification error, retrying...');
         setFaceBorderColor('red');
         setTimeout(() => setFaceBorderColor('gray'), 1000);
-        faceRetryTimeoutRef.current = setTimeout(verifyFace, 1500);
+        retryTimeout = setTimeout(verifyFace, 1500);
       }
     };
 
     verifyFace();
-    return () => clearTimeout(faceRetryTimeoutRef.current);
+
+    return () => clearTimeout(retryTimeout);
   }, [step, loggedUser]);
 
   // ------------------- QR Scan -------------------
   const handleScan = async (data) => {
     if (!data) return;
-
     const qrText = data.text || data;
     setSessionId(qrText);
 
@@ -152,27 +142,29 @@ export default function StudentLogin() {
         userId: loggedUser.userId,
         sessionId: qrText,
       });
-
       if (res.data.success) {
         setStatus('✅ Attendance marked');
         setQrBorderColor('limegreen');
-        clearTimeout(qrRetryTimeoutRef.current);
       } else {
-        setStatus('❌ Attendance failed, retrying...');
+        setStatus('❌ Attendance failed');
         setQrBorderColor('red');
-        setTimeout(() => setQrBorderColor('gray'), 1000);
-        qrRetryTimeoutRef.current = setTimeout(() => handleScan(data), 1500);
       }
+      setTimeout(() => setQrBorderColor('gray'), 1500);
     } catch (err) {
       console.error("QR scan error:", err.response?.data || err.message);
-      setStatus('❌ QR error, retrying...');
+      setStatus('❌ QR attendance error');
       setQrBorderColor('red');
-      setTimeout(() => setQrBorderColor('gray'), 1000);
-      qrRetryTimeoutRef.current = setTimeout(() => handleScan(data), 1500);
+      setTimeout(() => setQrBorderColor('gray'), 1500);
     }
   };
 
   const handleError = (err) => console.error('QR Scanner error:', err);
+
+  // ------------------- Auto-start camera for face step -------------------
+  useEffect(() => {
+    if (step === 'face') startCamera();
+    return () => stopCamera();
+  }, [step, cameraFacingMode]);
 
   return (
     <div style={{ padding: 20, position: 'relative' }}>
@@ -223,7 +215,10 @@ export default function StudentLogin() {
               color: 'white',
               fontWeight: 'bold',
               cursor: 'pointer',
+              transition: '0.2s'
             }}
+            onMouseOver={e => e.currentTarget.style.backgroundColor = '#218838'}
+            onMouseOut={e => e.currentTarget.style.backgroundColor = '#28a745'}
           >
             Login
           </button>
@@ -267,6 +262,7 @@ export default function StudentLogin() {
           <p>Step: Scan Teacher QR to mark attendance</p>
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
             <QrScanner
+              key={cameraFacingMode} // 🔥 forces re-mount on camera change
               delay={300}
               style={{ width: '100%' }}
               onError={handleError}
