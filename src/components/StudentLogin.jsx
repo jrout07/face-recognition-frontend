@@ -119,7 +119,10 @@ useEffect(() => {
     const imageBase64 = canvas.toDataURL('image/jpeg');
 
     try {
-      const res = await api.post('/checkLiveness', { imageBase64 });
+      const res = await api.post('/checkLiveness', {
+  imageBase64: imageBase64.split(",")[1],
+});
+
 
       if (res.data.success) {
         const eyesOpen = res.data.eyesOpen;
