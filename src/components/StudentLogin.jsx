@@ -10,27 +10,22 @@ export default function StudentLogin() {
   const [sessionId, setSessionId] = useState('');
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
-  const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front by default
+  const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front camera default
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-  // ------------------- Camera -------------------
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) videoRef.current.srcObject = null;
-  };
-
-  const startCamera = async (facingMode = 'user') => {
-    if (!videoRef.current) return;
+  // ---------------- Camera Control ----------------
+  const startCamera = async () => {
     stopCamera();
+    if (!videoRef.current) return;
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode } });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: cameraFacingMode },
+      });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
@@ -40,7 +35,15 @@ export default function StudentLogin() {
     }
   };
 
-  // ------------------- Logout -------------------
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) videoRef.current.srcObject = null;
+  };
+
+  // ---------------- Logout ----------------
   const handleLogout = () => {
     stopCamera();
     setLoggedUser(null);
@@ -53,11 +56,12 @@ export default function StudentLogin() {
     setCameraFacingMode('user');
   };
 
-  // ------------------- Login -------------------
+  // ---------------- Login ----------------
   const handleLogin = async () => {
     if (!form.userId || !form.password) return alert('Enter userId and password');
+
     try {
-      const res = await api.post("/login", form);
+      const res = await api.post('/login', form);
       if (res.data.success && res.data.role === 'student') {
         setLoggedUser(res.data);
         setStep('face');
@@ -67,16 +71,12 @@ export default function StudentLogin() {
         alert(res.data.error || 'Login failed');
       }
     } catch (err) {
-      const errorMsg =
-        err.response?.data?.error?.message ||
-        err.response?.data?.error ||
-        err.message ||
-        "Unknown error";
-      alert('Login error: ' + errorMsg);
+      console.error('Login error:', err);
+      alert('Login error: ' + (err?.response?.data?.error || err.message));
     }
   };
 
-  // ------------------- Face Verification -------------------
+  // ---------------- Face Verification ----------------
   useEffect(() => {
     if (step !== 'face' || !loggedUser) return;
 
@@ -85,7 +85,7 @@ export default function StudentLogin() {
     const verifyFace = async () => {
       if (!videoRef.current) return;
 
-      // Wait until video metadata loaded
+      // Wait until video is ready
       if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
         videoRef.current.onloadedmetadata = () => verifyFace();
         return;
@@ -98,7 +98,7 @@ export default function StudentLogin() {
       const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
 
       try {
-        const res = await api.post("/markAttendanceLive", {
+        const res = await api.post('/markAttendanceLive', {
           userId: loggedUser.userId,
           imageBase64,
         });
@@ -109,7 +109,8 @@ export default function StudentLogin() {
           stopCamera();
 
           setTimeout(() => {
-            setCameraFacingMode(isMobile ? 'environment' : 'user'); // switch camera
+            // On mobile, use back camera for QR scan
+            setCameraFacingMode(isMobile ? 'environment' : 'user');
             setStep('qr');
           }, 1000);
         } else {
@@ -119,7 +120,7 @@ export default function StudentLogin() {
           retryTimeout = setTimeout(verifyFace, 1500);
         }
       } catch (err) {
-        console.error("Face verification error:", err);
+        console.error('Face verification error:', err);
         setStatus('❌ Face verification error, retrying...');
         setFaceBorderColor('red');
         setTimeout(() => setFaceBorderColor('gray'), 1000);
@@ -127,22 +128,23 @@ export default function StudentLogin() {
       }
     };
 
-    startCamera('user').then(() => verifyFace());
+    startCamera().then(() => verifyFace());
 
     return () => clearTimeout(retryTimeout);
-  }, [step, loggedUser]);
+  }, [step, loggedUser, cameraFacingMode]);
 
-  // ------------------- QR Scan -------------------
+  // ---------------- QR Scan ----------------
   const handleScan = async (data) => {
     if (!data) return;
     const qrText = data.text || data;
     setSessionId(qrText);
 
     try {
-      const res = await api.post("/attendance/mark", {
+      const res = await api.post('/attendance/mark', {
         userId: loggedUser.userId,
         sessionId: qrText,
       });
+
       if (res.data.success) {
         setStatus('✅ Attendance marked');
         setQrBorderColor('limegreen');
@@ -150,9 +152,10 @@ export default function StudentLogin() {
         setStatus('❌ Attendance failed');
         setQrBorderColor('red');
       }
+
       setTimeout(() => setQrBorderColor('gray'), 1500);
     } catch (err) {
-      console.error("QR scan error:", err);
+      console.error('QR scan error:', err);
       setStatus('❌ QR attendance error');
       setQrBorderColor('red');
       setTimeout(() => setQrBorderColor('gray'), 1500);
@@ -162,7 +165,7 @@ export default function StudentLogin() {
   const handleError = (err) => console.error('QR Scanner error:', err);
 
   return (
-    <div style={{ padding: 20, position: 'relative' }}>
+    <div style={{ padding: 20 }}>
       <h3>Student Login & Attendance</h3>
 
       {loggedUser && (
@@ -185,20 +188,21 @@ export default function StudentLogin() {
         </button>
       )}
 
+      {/* Login Step */}
       {step === 'login' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <input
             placeholder="User ID"
             value={form.userId}
             onChange={e => setForm({ ...form, userId: e.target.value })}
-            style={{ padding: '8px', borderRadius: 5, border: '1px solid #ccc' }}
+            style={{ padding: 8, borderRadius: 5, border: '1px solid #ccc' }}
           />
           <input
             type="password"
             placeholder="Password"
             value={form.password}
             onChange={e => setForm({ ...form, password: e.target.value })}
-            style={{ padding: '8px', borderRadius: 5, border: '1px solid #ccc' }}
+            style={{ padding: 8, borderRadius: 5, border: '1px solid #ccc' }}
           />
           <button
             onClick={handleLogin}
@@ -210,16 +214,14 @@ export default function StudentLogin() {
               color: 'white',
               fontWeight: 'bold',
               cursor: 'pointer',
-              transition: '0.2s'
             }}
-            onMouseOver={e => e.currentTarget.style.backgroundColor = '#218838'}
-            onMouseOut={e => e.currentTarget.style.backgroundColor = '#28a745'}
           >
             Login
           </button>
         </div>
       )}
 
+      {/* Face Verification Step */}
       {step === 'face' && (
         <div style={{ position: 'relative', width: 320, height: 240 }}>
           <p>Step: Face Verification (Automatic)</p>
@@ -227,8 +229,8 @@ export default function StudentLogin() {
             ref={videoRef}
             autoPlay
             playsInline
-            width="320"
-            height="240"
+            width={320}
+            height={240}
             style={{ border: `5px solid ${faceBorderColor}`, borderRadius: 5 }}
           />
           <div
@@ -252,21 +254,17 @@ export default function StudentLogin() {
         </div>
       )}
 
+      {/* QR Scan Step */}
       {step === 'qr' && (
         <div style={{ position: 'relative', width: 320 }}>
           <p>Step: Scan Teacher QR to mark attendance</p>
 
           {isMobile && (
             <button
-              onClick={async () => {
-                stopCamera();
-                setStatus('Switching camera...');
-                await new Promise(res => setTimeout(res, 300));
-                setCameraFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
-              }}
+              onClick={() => setCameraFacingMode(prev => (prev === 'user' ? 'environment' : 'user'))}
               style={{
                 marginBottom: 5,
-                padding: '6px 12px',
+                padding: '5px 10px',
                 borderRadius: 5,
                 border: 'none',
                 backgroundColor: '#007bff',
@@ -280,7 +278,7 @@ export default function StudentLogin() {
 
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
             <QrScanner
-              key={cameraFacingMode + step} // force remount on camera change
+              key={cameraFacingMode} // remount on camera change
               delay={300}
               style={{ width: '100%' }}
               onError={handleError}
