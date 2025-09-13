@@ -182,14 +182,19 @@ export default function StudentLogin() {
         qrToken: parsed.qrToken,
       });
 
-      if (res.data.success) {
-        setStatus('✅ Attendance marked');
-        setQrBorderColor('limegreen');
-        setScannerActive(false); // ✅ stop further scans after success
-      } else {
-        setStatus('❌ ' + (res.data.error || 'Attendance failed'));
-        setQrBorderColor('red');
-      }
+   if (res.data.success) {
+  setStatus('✅ Attendance marked');
+  setQrBorderColor('limegreen');
+  setScannerActive(false); // ✅ stop further scans after success
+} else if (res.data.error === "Attendance already marked") {
+  setStatus('✅ You’ve already marked attendance');
+  setQrBorderColor('limegreen');
+  setScannerActive(false); // ✅ also stop scanning again
+} else {
+  setStatus('❌ ' + (res.data.error || 'Attendance failed'));
+  setQrBorderColor('red');
+}
+
       setTimeout(() => setQrBorderColor('gray'), 2000);
     } catch (err) {
       console.error('QR scan error:', err);
