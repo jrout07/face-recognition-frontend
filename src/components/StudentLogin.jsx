@@ -98,59 +98,60 @@ export default function StudentLogin() {
     }
   };
 
-  /* ---------------- Face Verification ---------------- */
-  useEffect(() => {
-    if (step !== 'face' || !loggedUser) return;
-    let retryTimeout;
+ /* ---------------- Face Verification (Blink + Face in one API) ---------------- */
+useEffect(() => {
+  if (step !== 'face' || !loggedUser) return;
+  let retryInterval;
 
-    const verifyFace = async () => {
-      if (!videoRef.current) return;
+  const verifyFace = async () => {
+    if (!videoRef.current) return;
 
-      if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
-        videoRef.current.onloadedmetadata = () => verifyFace();
-        return;
-      }
+    if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
+      videoRef.current.onloadedmetadata = () => verifyFace();
+      return;
+    }
 
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
+    const canvas = document.createElement('canvas');
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
 
-      try {
-        const res = await api.post('/markAttendanceLive', {
-          userId: loggedUser.userId,
-          imageBase64,
-        });
+    try {
+      const res = await api.post('/markAttendanceLive', {
+        userId: loggedUser.userId,
+        imageBase64,
+      });
 
-        if (res.data.success) {
-          setStatus('✅ Face verified! Moving to QR scan...');
-          setFaceBorderColor('limegreen');
-          stopCamera();
-
-          setTimeout(() => {
-            useBackCamera();
-            setStep('qr');
-            setScannerActive(true); // ✅ enable scanner at QR step
-          }, 1000);
-        } else {
-          setStatus('❌ Face not matched, retrying...');
-          setFaceBorderColor('red');
-          setTimeout(() => setFaceBorderColor('gray'), 1000);
-          retryTimeout = setTimeout(verifyFace, 1500);
-        }
-      } catch (err) {
-        console.error('Face verification error:', err);
-        setStatus('❌ Face verification error, retrying...');
-        setFaceBorderColor('red');
+      if (res.data.success) {
+        setStatus('✅ Blink + Face verified! Moving to QR scan...');
+        setFaceBorderColor('limegreen');
+        stopCamera();
+        setTimeout(() => {
+          useBackCamera();
+          setStep('qr');
+          setScannerActive(true);
+        }, 1000);
+      } else {
+        setStatus(res.data.error || '❌ Verification failed, retrying...');
+        setFaceBorderColor(res.data.error?.includes("blink") ? 'orange' : 'red');
         setTimeout(() => setFaceBorderColor('gray'), 1000);
-        retryTimeout = setTimeout(verifyFace, 1500);
       }
-    };
+    } catch (err) {
+      console.error('Face verification error:', err);
+      setStatus('⚠️ Face verification error, retrying...');
+      setFaceBorderColor('red');
+      setTimeout(() => setFaceBorderColor('gray'), 1000);
+    }
+  };
 
-    startCamera('user').then(() => verifyFace());
-    return () => clearTimeout(retryTimeout);
-  }, [step, loggedUser]);
+  startCamera('user').then(() => {
+    retryInterval = setInterval(verifyFace, 1200); // check every ~1.2s
+  });
+
+  return () => clearInterval(retryInterval);
+}, [step, loggedUser]);
+
 
   /* ---------------- QR Scan ---------------- */
   const handleScan = async data => {
