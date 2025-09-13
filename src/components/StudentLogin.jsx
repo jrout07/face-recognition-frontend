@@ -1,5 +1,4 @@
 import React, { useRef, useState, useEffect } from 'react';
-import axios from 'axios';
 import QrScanner from 'react-qr-scanner';
 import api from './api';
 
@@ -107,7 +106,7 @@ export default function StudentLogin() {
       const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1]; // strip prefix
 
       try {
-       const res = await api.post("/markAttendanceLive", {
+        const res = await api.post("/markAttendanceLive", {
           userId: loggedUser.userId,
           imageBase64,
         });
@@ -118,7 +117,7 @@ export default function StudentLogin() {
           stopCamera();
           setTimeout(() => {
             setStep('qr');
-            swapCamera();
+            swapCamera(); // switch to back camera for QR scan
           }, 1000);
         } else {
           setStatus('❌ Face not matched, retrying...');
@@ -141,30 +140,48 @@ export default function StudentLogin() {
   }, [step, loggedUser]);
 
   // ------------------- QR Scan -------------------
-  const handleScan = async (data) => {
+  const handleScan = (data) => {
     if (!data) return;
-    const qrText = data.text || data;
-    setSessionId(qrText);
+
+    let qrText = data.text || data;
+    let sessionData;
 
     try {
-      const res = await api.post("/attendance/mark", {
-        userId: loggedUser.userId,
-        sessionId: qrText,
-      });
-      if (res.data.success) {
-        setStatus('✅ Attendance marked');
-        setQrBorderColor('limegreen');
-      } else {
-        setStatus('❌ Attendance failed');
-        setQrBorderColor('red');
-      }
-      setTimeout(() => setQrBorderColor('gray'), 1500);
-    } catch (err) {
-      console.error("QR scan error:", err.response?.data || err.message);
-      setStatus('❌ QR attendance error');
-      setQrBorderColor('red');
-      setTimeout(() => setQrBorderColor('gray'), 1500);
+      sessionData = JSON.parse(qrText); // Parse JSON from teacher QR
+    } catch {
+      setStatus("❌ Invalid QR code");
+      setQrBorderColor("red");
+      setTimeout(() => setQrBorderColor("gray"), 1500);
+      return;
     }
+
+    const attemptAttendance = async () => {
+      try {
+        const res = await api.post("/attendance/mark", {
+          userId: loggedUser.userId,
+          sessionId: sessionData.sessionId,
+          qrToken: sessionData.qrToken,
+        });
+
+        if (res.data.success) {
+          setStatus('✅ Attendance marked');
+          setQrBorderColor('limegreen');
+        } else {
+          setStatus('❌ Attendance failed, retrying...');
+          setQrBorderColor('red');
+          setTimeout(() => setQrBorderColor("gray"), 1500);
+          setTimeout(attemptAttendance, 1500);
+        }
+      } catch (err) {
+        console.error("QR scan error:", err.response?.data || err.message);
+        setStatus('❌ QR error, retrying...');
+        setQrBorderColor('red');
+        setTimeout(() => setQrBorderColor("gray"), 1500);
+        setTimeout(attemptAttendance, 1500);
+      }
+    };
+
+    attemptAttendance();
   };
 
   const handleError = (err) => console.error('QR Scanner error:', err);
