@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import axios from "axios";
-import api from './api';
+import api from "./api"; // use the axios instance with baseURL
 
 export default function TeacherDashboard() {
   const [form, setForm] = useState({ teacherId: "", password: "" });
@@ -41,7 +40,7 @@ export default function TeacherDashboard() {
   const login = async () => {
     if (!form.teacherId || !form.password) return alert("Enter teacher ID & password");
     try {
-      const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/login`, {
+      const res = await api.post("/login", {
         userId: form.teacherId,
         password: form.password,
       });
@@ -66,7 +65,7 @@ export default function TeacherDashboard() {
     const imageBase64 = canvas.toDataURL("image/jpeg");
 
     try {
-      const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/markAttendanceLive`, {
+      const res = await api.post("/markAttendanceLive", {
         userId: form.teacherId,
         imageBase64,
       });
@@ -89,7 +88,7 @@ export default function TeacherDashboard() {
   /* ---------------- Students ---------------- */
   const fetchStudents = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/teacher/class-students/${classId}`);
+      const res = await api.get(`/teacher/class-students/${classId}`);
       if (res.data.success) {
         setStudents(res.data.students.map(s => ({ ...s, attended: false })));
       }
@@ -101,7 +100,7 @@ export default function TeacherDashboard() {
   /* ---------------- Session & QR ---------------- */
   const createSession = async () => {
     try {
-      const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/teacher/createSession`, {
+      const res = await api.post("/teacher/createSession", {
         teacherId: form.teacherId,
         classId,
       });
@@ -124,7 +123,7 @@ export default function TeacherDashboard() {
       if (!sessionRef.current) return;
 
       try {
-        const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/teacher/refreshQr`, {
+        const res = await api.post("/teacher/refreshQr", {
           sessionId: sessionRef.current.sessionId,
         });
 
@@ -159,7 +158,7 @@ export default function TeacherDashboard() {
     if (!faceVerified) return;
     attendancePollRef.current = setInterval(async () => {
       try {
-        const res = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/teacher/scanned-students/${classId}`);
+        const res = await api.get(`/teacher/scanned-students/${classId}`);
         if (res.data.success) {
           setStudents(prev =>
             prev.map(s => ({
@@ -180,7 +179,7 @@ export default function TeacherDashboard() {
   const submitAttendance = async () => {
     if (!sessionRef.current) return;
     try {
-      const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/teacher/submitAttendance`, {
+      const res = await api.post("/teacher/submitAttendance", {
         sessionId: sessionRef.current.sessionId,
       });
       if (res.data.success) {
