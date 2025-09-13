@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import api from "./api"; // use the axios instance with baseURL
+import api from "./api"; // axios instance with baseURL
 
 export default function TeacherDashboard() {
   const [form, setForm] = useState({ teacherId: "", password: "" });
@@ -32,8 +32,10 @@ export default function TeacherDashboard() {
 
   const stopCamera = () => {
     const stream = videoRef.current?.srcObject;
-    if (stream) stream.getTracks().forEach(track => track.stop());
-    videoRef.current.srcObject = null;
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
   };
 
   /* ---------------- Login ---------------- */
@@ -48,43 +50,45 @@ export default function TeacherDashboard() {
       if (res.data.success && res.data.role === "teacher") {
         setLogged(true);
         await startCamera();
-      } else alert(res.data.error || "Login failed");
+      } else {
+        alert(res.data.error || "Login failed");
+      }
     } catch (err) {
       alert("Login error: " + (err?.response?.data?.error || err.message));
     }
   };
 
- const autoFaceVerify = async () => {
-  if (!videoRef.current || faceVerified) return; // 🔥 removed verificationFailed
+  /* ---------------- Auto Face Verify ---------------- */
+  const autoFaceVerify = async () => {
+    if (!videoRef.current || faceVerified) return;
 
-  const canvas = document.createElement("canvas");
-  canvas.width = videoRef.current.videoWidth;
-  canvas.height = videoRef.current.videoHeight;
-  canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-  const imageBase64 = canvas.toDataURL("image/jpeg");
+    const canvas = document.createElement("canvas");
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    const imageBase64 = canvas.toDataURL("image/jpeg");
 
-  try {
-    const res = await api.post("/markAttendanceLive", {
-      userId: form.teacherId,
-      imageBase64,
-    });
+    try {
+      const res = await api.post("/markAttendanceLive", {
+        userId: form.teacherId,
+        imageBase64,
+      });
 
-    if (res.data.success) {
-      setFaceVerified(true);
-      setVerificationFailed(false); 
-      stopCamera();
-      fetchStudents();
-      await createSession();
-    } else {
+      if (res.data.success) {
+        setFaceVerified(true);
+        setVerificationFailed(false);
+        stopCamera();
+        fetchStudents();
+        await createSession();
+      } else {
+        setVerificationFailed(true);
+        faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000);
+      }
+    } catch (err) {
       setVerificationFailed(true);
-      faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000); // keep retrying
+      faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000);
     }
-  } catch (err) {
-    setVerificationFailed(true);
-    faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000); // keep retrying
-  }
-};
-
+  };
 
   /* ---------------- Students ---------------- */
   const fetchStudents = async () => {
@@ -108,9 +112,13 @@ export default function TeacherDashboard() {
 
       if (res.data.success) {
         sessionRef.current = res.data.session;
-        setQrData(JSON.stringify({ sessionId: res.data.session.sessionId, qrToken: res.data.session.qrToken }));
-        startQrCountdown(600); // 10 minutes countdown
-        startQrAutoRefresh(); // refresh QR every 10s
+        // 🔑 Always encode sessionId + qrToken
+        setQrData(JSON.stringify({
+          sessionId: res.data.session.sessionId,
+          qrToken: res.data.session.qrToken
+        }));
+        startQrCountdown(600); // 10 min
+        startQrAutoRefresh();
       }
     } catch (err) {
       console.error("Create session error:", err);
@@ -130,12 +138,16 @@ export default function TeacherDashboard() {
 
         if (res.data.success) {
           sessionRef.current.qrToken = res.data.qrToken;
-          setQrData(JSON.stringify({ sessionId: sessionRef.current.sessionId, qrToken: res.data.qrToken }));
+          // 🔑 refresh both sessionId + new qrToken
+          setQrData(JSON.stringify({
+            sessionId: sessionRef.current.sessionId,
+            qrToken: res.data.qrToken
+          }));
         }
       } catch (err) {
         console.error("QR refresh error:", err);
       }
-    }, 10000); // every 10 seconds
+    }, 10000); // every 10s
   };
 
   /* ---------------- QR Countdown ---------------- */
@@ -301,7 +313,16 @@ export default function TeacherDashboard() {
                     alt="Class QR"
                   />
                   <p>QR refreshes in: <strong>{qrCountdown}s</strong></p>
-                  <button onClick={submitAttendance} style={{ marginTop: 10, padding: "8px 12px", borderRadius: 6, backgroundColor: "#27ae60", color: "#fff" }}>
+                  <button
+                    onClick={submitAttendance}
+                    style={{
+                      marginTop: 10,
+                      padding: "8px 12px",
+                      borderRadius: 6,
+                      backgroundColor: "#27ae60",
+                      color: "#fff"
+                    }}
+                  >
                     Finalize Attendance
                   </button>
                 </div>
