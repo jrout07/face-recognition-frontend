@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import QrScanner from 'react-qr-scanner';
 import api from './api';
+import QrScanner from 'react-qr-scanner';
 
 export default function StudentLogin() {
   const [form, setForm] = useState({ userId: '', password: '' });
@@ -15,7 +15,7 @@ export default function StudentLogin() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
   // ------------------- Camera -------------------
   const startCamera = async () => {
@@ -40,14 +40,9 @@ export default function StudentLogin() {
     if (videoRef.current) videoRef.current.srcObject = null;
   };
 
-  const swapCamera = () => {
-    stopCamera();
-    setCameraFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
-  };
-
-  // Auto-start camera when entering face or QR step
+  // Auto-start camera when entering face step
   useEffect(() => {
-    if (step === 'face' || step === 'qr') startCamera();
+    if (step === 'face') startCamera();
     return () => stopCamera();
   }, [step, cameraFacingMode]);
 
@@ -78,12 +73,8 @@ export default function StudentLogin() {
         alert(res.data.error || 'Login failed');
       }
     } catch (err) {
-      const errorMsg =
-        err.response?.data?.error?.message ||
-        err.response?.data?.error ||
-        err.message ||
-        "Unknown error";
-      alert('Login error: ' + errorMsg);
+      console.error("Login error:", err.response?.data || err.message);
+      alert('Login error: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -104,7 +95,7 @@ export default function StudentLogin() {
       canvas.width = videoRef.current.videoWidth;
       canvas.height = videoRef.current.videoHeight;
       canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1]; // strip prefix
+      const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
 
       try {
         const res = await api.post("/markAttendanceLive", {
@@ -117,10 +108,10 @@ export default function StudentLogin() {
           setFaceBorderColor('limegreen');
           stopCamera();
 
-          setTimeout(() => {
-            setStep('qr');
-            setCameraFacingMode(isMobile ? 'environment' : 'user'); // back camera on mobile
-          }, 1000);
+          // Set back camera for mobile before QR scan
+          setCameraFacingMode(isMobile ? 'environment' : 'user');
+
+          setTimeout(() => setStep('qr'), 1000);
         } else {
           setStatus('❌ Face not matched, retrying...');
           setFaceBorderColor('red');
@@ -128,6 +119,7 @@ export default function StudentLogin() {
           retryTimeout = setTimeout(verifyFace, 1500);
         }
       } catch (err) {
+        console.error("Face verification error:", err.response?.data || err.message);
         setStatus('❌ Face verification error, retrying...');
         setFaceBorderColor('red');
         setTimeout(() => setFaceBorderColor('gray'), 1000);
@@ -150,7 +142,6 @@ export default function StudentLogin() {
         userId: loggedUser.userId,
         sessionId: qrText,
       });
-
       if (res.data.success) {
         setStatus('✅ Attendance marked');
         setQrBorderColor('limegreen');
@@ -169,7 +160,6 @@ export default function StudentLogin() {
 
   const handleError = (err) => console.error('QR Scanner error:', err);
 
-  // ------------------- UI -------------------
   return (
     <div style={{ padding: 20, position: 'relative' }}>
       <h3>Student Login & Attendance</h3>
@@ -261,11 +251,12 @@ export default function StudentLogin() {
         </div>
       )}
 
-      {step === 'qr' && (
+      {step === 'qr' && cameraFacingMode && (
         <div style={{ position: 'relative', width: 320 }}>
           <p>Step: Scan Teacher QR to mark attendance</p>
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
             <QrScanner
+              key={cameraFacingMode} // force re-mount to switch camera
               delay={300}
               style={{ width: '100%' }}
               onError={handleError}
