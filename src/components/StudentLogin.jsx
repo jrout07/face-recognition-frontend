@@ -21,10 +21,15 @@ export default function StudentLogin() {
   /* ------------------- Camera Helpers ------------------- */
   const stopCamera = () => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach(track => {
+        track.stop();
+        streamRef.current.removeTrack(track); // 🔥 force remove
+      });
       streamRef.current = null;
     }
-    if (videoRef.current) videoRef.current.srcObject = null;
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
   };
 
   const startCamera = async (facingMode = 'user') => {
@@ -285,7 +290,7 @@ export default function StudentLogin() {
         </div>
       )}
 
-      {step === 'qr' && (
+      {step === 'qr' && selectedCamera && (
         <div style={{ position: 'relative', width: 320 }}>
           <p>Step: Scan Teacher QR to mark attendance</p>
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
@@ -295,9 +300,7 @@ export default function StudentLogin() {
               style={{ width: '100%' }}
               onError={handleError}
               onScan={handleScan}
-              constraints={{
-                video: selectedCamera ? { deviceId: { exact: selectedCamera } } : undefined,
-              }}
+              constraints={{ video: { deviceId: { exact: selectedCamera } } }}
             />
           </div>
           <p>{status}</p>
