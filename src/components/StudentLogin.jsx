@@ -97,7 +97,6 @@ export default function StudentLogin() {
       alert('Login error: ' + (err.response?.data?.error || err.message));
     }
   };
-
 /* ---------------- Face Verification with Blink ---------------- */
 useEffect(() => {
   if (step !== 'face' || !loggedUser) return;
@@ -141,6 +140,8 @@ useEffect(() => {
           const faceRes = await api.post('/markAttendanceLive', {
             userId: loggedUser.userId,
             imageBase64: imageBase64.split(',')[1], // strip header
+            blinkVerified: true,   // 👁 tell backend blink happened
+            sessionId,             // 👨‍🎓 include sessionId
           });
 
           if (faceRes.data.success) {
@@ -177,7 +178,7 @@ useEffect(() => {
   });
 
   return () => clearInterval(retryInterval);
-}, [step, loggedUser]);
+}, [step, loggedUser, sessionId]);
 
 
   /* ---------------- QR Scan ---------------- */
