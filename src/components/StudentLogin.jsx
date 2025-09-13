@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
 import QrScanner from 'react-qr-scanner';
+import api from './api';
 
 export default function StudentLogin() {
   const [form, setForm] = useState({ userId: '', password: '' });
