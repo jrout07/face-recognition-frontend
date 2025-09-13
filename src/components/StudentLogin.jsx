@@ -97,58 +97,48 @@ export default function StudentLogin() {
       alert('Login error: ' + (err.response?.data?.error || err.message));
     }
   };
-/* ---------------- Face Verification with Blink ---------------- */
+/* ---------------- Face Verification with Smile ---------------- */
 useEffect(() => {
-  if (step !== 'face' || !loggedUser) return;
+  if (step !== "face" || !loggedUser) return;
   let retryInterval;
-  let blinkDetected = false;
-  let lastEyesOpen = true; // assume open at start
+  let smileDetected = false;
 
-  const checkLiveness = async () => {
+  const checkSmile = async () => {
     if (!videoRef.current) return;
 
     if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
-      videoRef.current.onloadedmetadata = () => checkLiveness();
+      videoRef.current.onloadedmetadata = () => checkSmile();
       return;
     }
 
-    const canvas = document.createElement('canvas');
+    const canvas = document.createElement("canvas");
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
-    canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    const imageBase64 = canvas.toDataURL('image/jpeg');
+    canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    const imageBase64 = canvas.toDataURL("image/jpeg").split(",")[1];
 
     try {
-      const res = await api.post('/checkLiveness', {
-  imageBase64: imageBase64.split(",")[1],
-});
-
+      // Call backend -> AWS Rekognition Smile Detection
+      const res = await api.post("/checkSmile", { imageBase64 });
 
       if (res.data.success) {
-        const eyesOpen = res.data.eyesOpen;
-
-        if (lastEyesOpen && !eyesOpen) {
-          setStatus("👀 Eyes closed detected, keep blinking...");
+        if (res.data.smile && res.data.confidence > 80) {
+          smileDetected = true;
+          setStatus("😀 Smile detected! Verifying face...");
+        } else {
+          setStatus("🙂 Please smile to continue...");
         }
 
-        if (!lastEyesOpen && eyesOpen) {
-          blinkDetected = true;
-          setStatus("✅ Blink detected! Verifying face...");
-        }
-
-        lastEyesOpen = eyesOpen;
-
-        if (blinkDetected) {
-          // Once blink is detected, send for face match
-          const faceRes = await api.post('/markAttendanceLive', {
+        if (smileDetected) {
+          const faceRes = await api.post("/markAttendanceLive", {
             userId: loggedUser.userId,
-            imageBase64: imageBase64.split(',')[1], // strip header
-            blinkVerified: true,   // 👁 tell backend blink happened
-            sessionId,             // 👨‍🎓 include sessionId
+            imageBase64,
+            smileVerified: true,
+            sessionId,
           });
 
           if (faceRes.data.success) {
-            setStatus("✅ Blink + Face verified! Moving to QR...");
+            setStatus("✅ Smile + Face verified! Moving to QR...");
             setFaceBorderColor("limegreen");
             stopCamera();
 
@@ -158,26 +148,24 @@ useEffect(() => {
               setScannerActive(true);
             }, 1000);
 
-            clearInterval(retryInterval); // stop checking further
+            clearInterval(retryInterval);
           } else {
-            setStatus("❌ Face not matched after blink, retrying...");
+            setStatus("❌ Face not matched after smile, retrying...");
             setFaceBorderColor("red");
             setTimeout(() => setFaceBorderColor("gray"), 1000);
           }
-        } else {
-          setStatus("Please blink your eyes to continue...");
         }
       } else {
         setStatus("⚠️ No face detected, adjust camera...");
       }
     } catch (err) {
-      console.error("Blink check error:", err);
-      setStatus("⚠️ Error checking blink...");
+      console.error("Smile check error:", err);
+      setStatus("⚠️ Error checking smile...");
     }
   };
 
   startCamera("user").then(() => {
-    retryInterval = setInterval(checkLiveness, 1200); // check every 1.2s
+    retryInterval = setInterval(checkSmile, 1500); // check every 1.5s
   });
 
   return () => clearInterval(retryInterval);
