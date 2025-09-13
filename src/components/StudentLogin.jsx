@@ -11,27 +11,22 @@ export default function StudentLogin() {
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
   const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front by default
-  const [isMobile, setIsMobile] = useState(false);
-
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
-  // Detect if mobile
-  useEffect(() => {
-    const ua = navigator.userAgent;
-    setIsMobile(/Android|iPhone|iPad|iPod/i.test(ua));
-  }, []);
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   // ------------------- Camera -------------------
   const startCamera = async () => {
     if (!videoRef.current) return;
+    stopCamera();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: cameraFacingMode }
+        video: { facingMode: cameraFacingMode },
       });
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
-      videoRef.current.play();
+      await videoRef.current.play();
     } catch (err) {
       alert('Cannot access camera: ' + err.message);
     }
@@ -43,6 +38,10 @@ export default function StudentLogin() {
       streamRef.current = null;
     }
     if (videoRef.current) videoRef.current.srcObject = null;
+  };
+
+  const swapCamera = () => {
+    setCameraFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
   };
 
   // ------------------- Logout -------------------
@@ -72,7 +71,6 @@ export default function StudentLogin() {
         alert(res.data.error || 'Login failed');
       }
     } catch (err) {
-      console.error("Login error:", err.response?.data || err.message);
       const errorMsg =
         err.response?.data?.error?.message ||
         err.response?.data?.error ||
@@ -84,14 +82,16 @@ export default function StudentLogin() {
 
   // ------------------- Face Verification -------------------
   useEffect(() => {
-    if (step !== 'face') return;
+    if (step !== 'face' || !loggedUser) return;
 
     let retryTimeout;
 
     const verifyFace = async () => {
-      if (!videoRef.current || !videoRef.current.videoWidth || !videoRef.current.videoHeight) {
-        setStatus('❌ Video not ready, retrying...');
-        retryTimeout = setTimeout(verifyFace, 1500);
+      if (!videoRef.current) return;
+
+      // Wait until video metadata loaded
+      if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
+        videoRef.current.onloadedmetadata = () => verifyFace();
         return;
       }
 
@@ -112,7 +112,7 @@ export default function StudentLogin() {
           setFaceBorderColor('limegreen');
           stopCamera();
           setTimeout(() => {
-            // Set camera mode based on device
+            // On mobile, switch to back camera for QR scan
             setCameraFacingMode(isMobile ? 'environment' : 'user');
             setStep('qr');
           }, 1000);
@@ -123,7 +123,7 @@ export default function StudentLogin() {
           retryTimeout = setTimeout(verifyFace, 1500);
         }
       } catch (err) {
-        console.error("Face verification error:", err.response?.data || err.message);
+        console.error("Face verification error:", err);
         setStatus('❌ Face verification error, retrying...');
         setFaceBorderColor('red');
         setTimeout(() => setFaceBorderColor('gray'), 1000);
@@ -131,10 +131,10 @@ export default function StudentLogin() {
       }
     };
 
-    verifyFace();
+    startCamera().then(() => verifyFace());
 
     return () => clearTimeout(retryTimeout);
-  }, [step, loggedUser, isMobile]);
+  }, [step, loggedUser, cameraFacingMode]);
 
   // ------------------- QR Scan -------------------
   const handleScan = async (data) => {
@@ -156,7 +156,7 @@ export default function StudentLogin() {
       }
       setTimeout(() => setQrBorderColor('gray'), 1500);
     } catch (err) {
-      console.error("QR scan error:", err.response?.data || err.message);
+      console.error("QR scan error:", err);
       setStatus('❌ QR attendance error');
       setQrBorderColor('red');
       setTimeout(() => setQrBorderColor('gray'), 1500);
@@ -261,7 +261,6 @@ export default function StudentLogin() {
           <p>Step: Scan Teacher QR to mark attendance</p>
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
             <QrScanner
-              key={cameraFacingMode + Date.now()} // force remount to switch camera
               delay={300}
               style={{ width: '100%' }}
               onError={handleError}
