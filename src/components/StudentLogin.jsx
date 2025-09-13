@@ -163,19 +163,28 @@ export default function StudentLogin() {
   // ------------------- QR Scan -------------------
   const handleScan = async data => {
     if (!data) return;
-    const qrText = data.text || data;
-    setSessionId(qrText);
 
     try {
+      const qrText = data.text || data;
+      const parsed = JSON.parse(qrText); // ✅ Teacher QR has { sessionId, qrToken }
+
+      if (!parsed.sessionId || !parsed.qrToken) {
+        throw new Error('Invalid QR code');
+      }
+
+      setSessionId(parsed.sessionId);
+
       const res = await api.post('/attendance/mark', {
         userId: loggedUser.userId,
-        sessionId: qrText,
+        sessionId: parsed.sessionId,
+        qrToken: parsed.qrToken,
       });
+
       if (res.data.success) {
         setStatus('✅ Attendance marked');
         setQrBorderColor('limegreen');
       } else {
-        setStatus('❌ Attendance failed');
+        setStatus('❌ ' + (res.data.error || 'Attendance failed'));
         setQrBorderColor('red');
       }
       setTimeout(() => setQrBorderColor('gray'), 1500);
