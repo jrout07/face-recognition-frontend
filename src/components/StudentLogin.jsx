@@ -11,6 +11,7 @@ export default function StudentLogin() {
   const [faceBorderColor, setFaceBorderColor] = useState('gray');
   const [qrBorderColor, setQrBorderColor] = useState('gray');
   const [cameraFacingMode, setCameraFacingMode] = useState('user'); // front by default
+
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
@@ -31,27 +32,14 @@ export default function StudentLogin() {
       alert('Cannot access camera: ' + err.message);
     }
   };
-  
-stopCamera();
-setStep('qr'); // move to QR step first
-setTimeout(async () => {
-  // Wait a bit and start QR camera with correct facing
-  setCameraFacingMode(isMobile ? 'environment' : 'user');
-  if (videoRef.current) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: isMobile ? 'environment' : 'user' }
-      });
-      streamRef.current = stream;
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
-    } catch (err) {
-      console.error('Cannot open QR camera:', err);
-      setStatus('❌ Cannot access camera for QR scan');
-    }
-  }
-}, 500); // half-second delay for mobile browser
 
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) videoRef.current.srcObject = null;
+  };
 
   // ------------------- Logout -------------------
   const handleLogout = () => {
@@ -98,7 +86,6 @@ setTimeout(async () => {
     const verifyFace = async () => {
       if (!videoRef.current) return;
 
-      // Wait until video metadata loaded
       if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
         videoRef.current.onloadedmetadata = () => verifyFace();
         return;
@@ -117,14 +104,14 @@ setTimeout(async () => {
         });
 
         if (res.data.success) {
-          setStatus('✅ Face verified! Moving to QR scan...');
+          setStatus('✅ Face verified! Preparing QR scan...');
           setFaceBorderColor('limegreen');
-          stopCamera();
-          setTimeout(() => {
-            // On mobile, switch to back camera for QR scan
-            setCameraFacingMode(isMobile ? 'environment' : 'user');
-            setStep('qr');
-          }, 1000);
+
+          // Switch to back camera for mobile QR scan
+          const newFacingMode = isMobile ? 'environment' : 'user';
+          setCameraFacingMode(newFacingMode);
+
+          setTimeout(() => setStep('qr'), 400); // small delay
         } else {
           setStatus('❌ Face not matched, retrying...');
           setFaceBorderColor('red');
@@ -143,7 +130,7 @@ setTimeout(async () => {
     startCamera().then(() => verifyFace());
 
     return () => clearTimeout(retryTimeout);
-  }, [step, loggedUser, cameraFacingMode]);
+  }, [step, loggedUser]);
 
   // ------------------- QR Scan -------------------
   const handleScan = async (data) => {
@@ -270,6 +257,7 @@ setTimeout(async () => {
           <p>Step: Scan Teacher QR to mark attendance</p>
           <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5, padding: 5 }}>
             <QrScanner
+              key={cameraFacingMode} // force re-render to pick correct camera
               delay={300}
               style={{ width: '100%' }}
               onError={handleError}
