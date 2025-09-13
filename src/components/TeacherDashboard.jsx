@@ -314,24 +314,63 @@ export default function TeacherDashboard() {
                 <div style={{ textAlign: "center" }}>
                   {qrData ? (
                     <>
-                      <img
-                        style={{ margin: "10px 0", borderRadius: 8 }}
-                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrData)}&size=150x150`}
-                        alt="Class QR"
-                      />
-                      <p>QR refreshes in: <strong>{qrCountdown}s</strong></p>
-                      <button
-                        onClick={submitAttendance}
-                        style={{
-                          marginTop: 10,
-                          padding: "8px 12px",
-                          borderRadius: 6,
-                          backgroundColor: "#27ae60",
-                          color: "#fff"
-                        }}
-                      >
-                        Finalize Attendance
-                      </button>
+<img
+  style={{ margin: "10px 0", borderRadius: 8, width: "100%", maxWidth: "400px" }}
+  src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrData)}&size=400x400`}
+  alt="Class QR"
+/>
+
+{/* Countdown Text */}
+<p
+  style={{
+    fontSize: "20px",
+    fontWeight: "bold",
+    color: qrCountdown <= 60 ? "#e74c3c" : "#27ae60",
+    marginTop: 10,
+  }}
+>
+  QR refreshes in: <span>{qrCountdown}s</span>
+</p>
+
+{/* Progress Bar */}
+<div
+  style={{
+    width: "100%",
+    maxWidth: "400px",
+    height: "12px",
+    backgroundColor: "#ddd",
+    borderRadius: "6px",
+    overflow: "hidden",
+    marginTop: "8px",
+    marginBottom: "12px",
+  }}
+>
+  <div
+    style={{
+      height: "100%",
+      width: `${(qrCountdown / 600) * 100}%`, // 600s = 10min
+      backgroundColor: qrCountdown <= 60 ? "#e74c3c" : "#27ae60",
+      transition: "width 1s linear",
+    }}
+  />
+</div>
+
+<button
+  onClick={submitAttendance}
+  style={{
+    marginTop: 15,
+    padding: "10px 16px",
+    borderRadius: 6,
+    backgroundColor: "#27ae60",
+    color: "#fff",
+    fontSize: "16px",
+    fontWeight: "bold",
+    cursor: "pointer",
+  }}
+>
+  Finalize Attendance
+</button>
+
                     </>
                   ) : (
                     <p style={{ color: "#e74c3c", fontWeight: "bold" }}>QR expired or unavailable. Please wait...</p>
