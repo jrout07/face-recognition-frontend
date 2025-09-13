@@ -143,9 +143,13 @@ export default function TeacherDashboard() {
             sessionId: sessionRef.current.sessionId,
             qrToken: res.data.qrToken
           }));
+        } else {
+          console.warn("QR refresh failed");
+          setQrData(""); // ❌ hide QR if refresh failed
         }
       } catch (err) {
         console.error("QR refresh error:", err);
+        setQrData(""); // ❌ hide QR if refresh failed
       }
     }, 10000); // every 10s
   };
@@ -159,6 +163,7 @@ export default function TeacherDashboard() {
       setQrCountdown(prev => {
         if (prev <= 1) {
           clearInterval(countdownRef.current);
+          setQrData(""); // hide QR if expired
           return 0;
         }
         return prev - 1;
@@ -305,26 +310,32 @@ export default function TeacherDashboard() {
                 onChange={e => setClassId(e.target.value)}
               />
 
-              {faceVerified && qrData && !attendanceFinalized && (
+              {faceVerified && !attendanceFinalized && (
                 <div style={{ textAlign: "center" }}>
-                  <img
-                    style={{ margin: "10px 0", borderRadius: 8 }}
-                    src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrData)}&size=150x150`}
-                    alt="Class QR"
-                  />
-                  <p>QR refreshes in: <strong>{qrCountdown}s</strong></p>
-                  <button
-                    onClick={submitAttendance}
-                    style={{
-                      marginTop: 10,
-                      padding: "8px 12px",
-                      borderRadius: 6,
-                      backgroundColor: "#27ae60",
-                      color: "#fff"
-                    }}
-                  >
-                    Finalize Attendance
-                  </button>
+                  {qrData ? (
+                    <>
+                      <img
+                        style={{ margin: "10px 0", borderRadius: 8 }}
+                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrData)}&size=150x150`}
+                        alt="Class QR"
+                      />
+                      <p>QR refreshes in: <strong>{qrCountdown}s</strong></p>
+                      <button
+                        onClick={submitAttendance}
+                        style={{
+                          marginTop: 10,
+                          padding: "8px 12px",
+                          borderRadius: 6,
+                          backgroundColor: "#27ae60",
+                          color: "#fff"
+                        }}
+                      >
+                        Finalize Attendance
+                      </button>
+                    </>
+                  ) : (
+                    <p style={{ color: "#e74c3c", fontWeight: "bold" }}>QR expired or unavailable. Please wait...</p>
+                  )}
                 </div>
               )}
 
