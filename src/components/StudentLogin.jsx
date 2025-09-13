@@ -67,7 +67,7 @@ export default function StudentLogin() {
   const handleLogin = async () => {
     if (!form.userId || !form.password) return alert('Enter userId and password');
     try {
-      const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/login`, form);
+      const res = await api.post("/login", form);
       if (res.data.success && res.data.role === 'student') {
         setLoggedUser(res.data);
         setStep('face');
@@ -107,7 +107,7 @@ export default function StudentLogin() {
       const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1]; // strip prefix
 
       try {
-        const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/markAttendanceLive`, {
+       const res = await api.post("/markAttendanceLive", {
           userId: loggedUser.userId,
           imageBase64,
         });
@@ -147,7 +147,7 @@ export default function StudentLogin() {
     setSessionId(qrText);
 
     try {
-      const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/attendance/mark`, {
+      const res = await api.post("/attendance/mark", {
         userId: loggedUser.userId,
         sessionId: qrText,
       });
