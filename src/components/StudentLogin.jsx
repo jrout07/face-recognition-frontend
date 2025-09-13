@@ -15,20 +15,19 @@ export default function StudentLogin() {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
-  // Detect mobile devices
   const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 
   // ------------------- Camera -------------------
   const startCamera = async () => {
     if (!videoRef.current) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: cameraFacingMode },
-      });
+      const constraints = { video: { facingMode: cameraFacingMode } };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
       videoRef.current.srcObject = stream;
-      videoRef.current.play();
+      await videoRef.current.play();
     } catch (err) {
+      console.error('Cannot access camera:', err.message);
       alert('Cannot access camera: ' + err.message);
     }
   };
@@ -41,7 +40,7 @@ export default function StudentLogin() {
     if (videoRef.current) videoRef.current.srcObject = null;
   };
 
-  // Auto-start camera when entering face step
+  // Auto-start camera on step or facing mode change
   useEffect(() => {
     if (step === 'face' || step === 'qr') startCamera();
     return () => stopCamera();
@@ -94,7 +93,7 @@ export default function StudentLogin() {
       canvas.width = videoRef.current.videoWidth;
       canvas.height = videoRef.current.videoHeight;
       canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1]; // strip prefix
+      const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
 
       try {
         const res = await api.post('/markAttendanceLive', {
@@ -106,13 +105,13 @@ export default function StudentLogin() {
           setStatus('✅ Face verified! Moving to QR scan...');
           setFaceBorderColor('limegreen');
           stopCamera();
-          setTimeout(() => {
-            setStep('qr');
 
-            // On mobile use back camera, on desktop keep front
-            setCameraFacingMode(isMobile ? 'environment' : 'user');
-            setQrKey((prev) => prev + 1); // reload QR scanner
-          }, 1000);
+          // Switch camera for QR scan if mobile
+          const nextCamera = isMobile ? 'environment' : 'user';
+          setCameraFacingMode(nextCamera);
+
+          setStep('qr');
+          setQrKey((prev) => prev + 1); // reload QR scanner
         } else {
           setStatus('❌ Face not matched, retrying...');
           setFaceBorderColor('red');
@@ -140,7 +139,7 @@ export default function StudentLogin() {
     let sessionData;
 
     try {
-      sessionData = JSON.parse(qrText); // Parse JSON from teacher QR
+      sessionData = JSON.parse(qrText);
     } catch {
       setStatus('❌ Invalid QR code');
       setQrBorderColor('red');
