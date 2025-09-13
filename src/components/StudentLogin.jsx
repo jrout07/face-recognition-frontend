@@ -18,8 +18,6 @@ export default function StudentLogin() {
   const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState(null);
 
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
   // ------------------- Camera Helpers -------------------
   const stopCamera = () => {
     if (streamRef.current) {
@@ -166,8 +164,9 @@ export default function StudentLogin() {
 
     try {
       const qrText = data.text || data;
-      const parsed = JSON.parse(qrText); // ✅ Teacher QR has { sessionId, qrToken }
 
+      // ✅ Parse Teacher QR (must be JSON with sessionId & qrToken)
+      const parsed = JSON.parse(qrText);
       if (!parsed.sessionId || !parsed.qrToken) {
         throw new Error('Invalid QR code');
       }
