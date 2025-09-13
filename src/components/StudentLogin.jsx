@@ -76,7 +76,13 @@ export default function StudentLogin() {
         alert(res.data.error || 'Login failed');
       }
     } catch (err) {
-      alert('Login error: ' + (err?.response?.data?.error || err.message));
+      console.error("Login error:", err.response?.data || err.message);
+      const errorMsg =
+        err.response?.data?.error?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Unknown error";
+      alert('Login error: ' + errorMsg);
     }
   };
 
@@ -120,7 +126,7 @@ export default function StudentLogin() {
           retryTimeout = setTimeout(verifyFace, 1500);
         }
       } catch (err) {
-        console.error(err.response?.data || err.message);
+        console.error("Face verification error:", err.response?.data || err.message);
         setStatus('❌ Face verification error, retrying...');
         setFaceBorderColor('red');
         setTimeout(() => setFaceBorderColor('gray'), 1000);
@@ -153,6 +159,7 @@ export default function StudentLogin() {
       }
       setTimeout(() => setQrBorderColor('gray'), 1500);
     } catch (err) {
+      console.error("QR scan error:", err.response?.data || err.message);
       setStatus('❌ QR attendance error');
       setQrBorderColor('red');
       setTimeout(() => setQrBorderColor('gray'), 1500);
