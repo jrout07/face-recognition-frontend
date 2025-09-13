@@ -112,7 +112,6 @@ export default function TeacherDashboard() {
 
       if (res.data.success) {
         sessionRef.current = res.data.session;
-        // 🔑 Always encode sessionId + qrToken
         setQrData(JSON.stringify({
           sessionId: res.data.session.sessionId,
           qrToken: res.data.session.qrToken
@@ -138,18 +137,16 @@ export default function TeacherDashboard() {
 
         if (res.data.success) {
           sessionRef.current.qrToken = res.data.qrToken;
-          // 🔑 refresh both sessionId + new qrToken
           setQrData(JSON.stringify({
             sessionId: sessionRef.current.sessionId,
             qrToken: res.data.qrToken
           }));
+          setQrCountdown(600); // reset 10min countdown
         } else {
           console.warn("QR refresh failed");
-          setQrData(""); // ❌ hide QR if refresh failed
         }
       } catch (err) {
         console.error("QR refresh error:", err);
-        setQrData(""); // ❌ hide QR if refresh failed
       }
     }, 10000); // every 10s
   };
@@ -163,8 +160,7 @@ export default function TeacherDashboard() {
       setQrCountdown(prev => {
         if (prev <= 1) {
           clearInterval(countdownRef.current);
-          setQrData(""); // hide QR if expired
-          return 0;
+          return 0; // expired but keep last QR
         }
         return prev - 1;
       });
@@ -312,69 +308,91 @@ export default function TeacherDashboard() {
 
               {faceVerified && !attendanceFinalized && (
                 <div style={{ textAlign: "center" }}>
-                  {qrData ? (
-                    <>
-<img
-  style={{ margin: "10px 0", borderRadius: 8, width: "100%", maxWidth: "400px" }}
-  src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrData)}&size=400x400`}
-  alt="Class QR"
-/>
+                  {qrData && (
+                    <div style={{ position: "relative", display: "inline-block" }}>
+                      <img
+                        style={{
+                          margin: "10px 0",
+                          borderRadius: 8,
+                          width: "100%",
+                          maxWidth: "400px",
+                          opacity: qrCountdown === 0 ? 0.4 : 1,
+                        }}
+                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrData)}&size=400x400`}
+                        alt="Class QR"
+                      />
 
-{/* Countdown Text */}
-<p
-  style={{
-    fontSize: "20px",
-    fontWeight: "bold",
-    color: qrCountdown <= 60 ? "#e74c3c" : "#27ae60",
-    marginTop: 10,
-  }}
->
-  QR refreshes in: <span>{qrCountdown}s</span>
-</p>
-
-{/* Progress Bar */}
-<div
-  style={{
-    width: "100%",
-    maxWidth: "400px",
-    height: "12px",
-    backgroundColor: "#ddd",
-    borderRadius: "6px",
-    overflow: "hidden",
-    marginTop: "8px",
-    marginBottom: "12px",
-  }}
->
-  <div
-    style={{
-      height: "100%",
-      width: `${(qrCountdown / 600) * 100}%`, // 600s = 10min
-      backgroundColor: qrCountdown <= 60 ? "#e74c3c" : "#27ae60",
-      transition: "width 1s linear",
-    }}
-  />
-</div>
-
-<button
-  onClick={submitAttendance}
-  style={{
-    marginTop: 15,
-    padding: "10px 16px",
-    borderRadius: 6,
-    backgroundColor: "#27ae60",
-    color: "#fff",
-    fontSize: "16px",
-    fontWeight: "bold",
-    cursor: "pointer",
-  }}
->
-  Finalize Attendance
-</button>
-
-                    </>
-                  ) : (
-                    <p style={{ color: "#e74c3c", fontWeight: "bold" }}>QR expired or unavailable. Please wait...</p>
+                      {qrCountdown === 0 && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: "50%",
+                            left: "50%",
+                            transform: "translate(-50%, -50%)",
+                            background: "rgba(231, 76, 60, 0.85)",
+                            color: "#fff",
+                            padding: "12px 20px",
+                            borderRadius: "8px",
+                            fontWeight: "bold",
+                            fontSize: "18px",
+                          }}
+                        >
+                          ⚠️ QR Expired — New one coming...
+                        </div>
+                      )}
+                    </div>
                   )}
+
+                  <p
+                    style={{
+                      fontSize: "20px",
+                      fontWeight: "bold",
+                      color: qrCountdown <= 60 && qrCountdown > 0 ? "#e74c3c" : "#27ae60",
+                      marginTop: 10,
+                    }}
+                  >
+                    {qrCountdown > 0
+                      ? `QR refreshes in: ${qrCountdown}s`
+                      : "Generating new QR..."}
+                  </p>
+
+                  <div
+                    style={{
+                      width: "100%",
+                      maxWidth: "400px",
+                      height: "12px",
+                      backgroundColor: "#ddd",
+                      borderRadius: "6px",
+                      overflow: "hidden",
+                      marginTop: "8px",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${(qrCountdown / 600) * 100}%`,
+                        backgroundColor: qrCountdown <= 60 && qrCountdown > 0 ? "#e74c3c" : "#27ae60",
+                        transition: "width 1s linear",
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    onClick={submitAttendance}
+                    style={{
+                      marginTop: 15,
+                      padding: "10px 16px",
+                      borderRadius: 6,
+                      backgroundColor: "#27ae60",
+                      color: "#fff",
+                      fontSize: "16px",
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Finalize Attendance
+                  </button>
                 </div>
               )}
 
