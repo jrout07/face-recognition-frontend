@@ -11,7 +11,7 @@ const StudentDashboard = ({ loggedUser }) => {
   const qrVideoContainerRef = useRef(null);
   const qrScannerRef = useRef(null);
 
-  // 1. Face Verification
+  /* -------------------- Face Verification -------------------- */
   useEffect(() => {
     const verifyFace = async () => {
       try {
@@ -52,7 +52,7 @@ const StudentDashboard = ({ loggedUser }) => {
     if (step === "verify") verifyFace();
   }, [step, loggedUser.userId]);
 
-  // 2. Setup QR Scanner
+  /* -------------------- Setup QR Scanner -------------------- */
   useEffect(() => {
     if (step !== "scanQR" || !qrVideoContainerRef.current) return;
 
@@ -74,7 +74,7 @@ const StudentDashboard = ({ loggedUser }) => {
     };
   }, [step]);
 
-  // 3. Handle QR Scan Result
+  /* -------------------- Handle QR Scan -------------------- */
   const handleScan = async (data) => {
     if (!data || !scannerActive) return;
 
@@ -83,11 +83,7 @@ const StudentDashboard = ({ loggedUser }) => {
       let parsed;
 
       try {
-        parsed = JSON.parse(qrText);
-        if (typeof parsed === "string") {
-          // handle double-encoded payload
-          parsed = JSON.parse(parsed);
-        }
+        parsed = JSON.parse(qrText); // QR is always JSON { sessionId, qrToken }
       } catch {
         setStatus("⚠️ Invalid QR format");
         setQrBorderColor("red");
@@ -104,7 +100,7 @@ const StudentDashboard = ({ loggedUser }) => {
         return;
       }
 
-      // Take snapshot
+      // Take snapshot for face proof
       const videoElem = qrVideoContainerRef.current.querySelector("video");
       if (!videoElem) {
         setStatus("⚠️ Camera not ready");
@@ -149,7 +145,7 @@ const StudentDashboard = ({ loggedUser }) => {
     }
   };
 
-  // 4. UI
+  /* -------------------- UI -------------------- */
   return (
     <div className="p-6 bg-gray-100 min-h-screen">
       <h1 className="text-xl font-bold mb-4">Student Login & Attendance</h1>
