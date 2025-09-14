@@ -1,5 +1,5 @@
 // frontend/src/components/TeacherDashboard.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import QRCode from "qrcode.react";
 import api from "./api";
 
@@ -8,6 +8,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
   const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const intervalRef = useRef(null);
 
   // Create a new session
   const createSession = async () => {
@@ -32,12 +33,13 @@ const TeacherDashboard = ({ teacherId, classId }) => {
     }
   };
 
-  // Refresh QR token every 20s
+  // Auto-refresh QR token every 20s
   useEffect(() => {
-    if (!session) return;
-    const interval = setInterval(async () => {
+    if (!session || session.finalized) return;
+
+    intervalRef.current = setInterval(async () => {
       try {
-        const res = await api.get(`/teacher/getSession/${classId}`);
+        const res = await api.get(`/teacher/getSession/${session.classId}`);
         if (res.data.success) {
           setSession(res.data.session);
         }
@@ -45,10 +47,11 @@ const TeacherDashboard = ({ teacherId, classId }) => {
         console.error("Error refreshing session:", err);
       }
     }, 20000);
-    return () => clearInterval(interval);
-  }, [session, classId]);
 
-  // Fetch attendance
+    return () => clearInterval(intervalRef.current);
+  }, [session]);
+
+  // Fetch attendance records
   const fetchAttendance = async () => {
     if (!session) return;
     try {
@@ -157,7 +160,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
             </thead>
             <tbody>
               {attendance.map((record) => (
-                <tr key={record.userId}>
+                <tr key={`${record.userId}-${record.timestamp}`}>
                   <td className="border px-2 py-1">{record.userId}</td>
                   <td className="border px-2 py-1">{record.status}</td>
                   <td className="border px-2 py-1">
