@@ -174,10 +174,12 @@ export default function StudentDashboard() {
       canvas.getContext("2d").drawImage(qrVideoRef.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL("image/jpeg");
 
+      // ✅ FIX: include qrToken in request
       const res = await api.post("/markAttendanceLive", {
         userId: loggedUser.userId,
         sessionId: parsed.sessionId,
         imageBase64,
+        qrToken: parsed.qrToken,
       });
 
       if (res.data.success) {
