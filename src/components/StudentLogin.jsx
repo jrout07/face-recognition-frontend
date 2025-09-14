@@ -13,7 +13,8 @@ export default function StudentLogin() {
   const [qrKey, setQrKey] = useState(0);
   const [scannerActive, setScannerActive] = useState(true);
 
-  const videoRef = useRef(null); // used for snapshot
+  const faceVideoRef = useRef(null); // used for face verification
+  const qrVideoRef = useRef(null);   // used for snapshot during QR scan
   const streamRef = useRef(null);
 
   const [cameras, setCameras] = useState([]);
@@ -25,19 +26,20 @@ export default function StudentLogin() {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-    if (videoRef.current) videoRef.current.srcObject = null;
+    if (faceVideoRef.current) faceVideoRef.current.srcObject = null;
+    if (qrVideoRef.current) qrVideoRef.current.srcObject = null;
   };
 
-  const startCamera = async (facingMode = "user") => {
-    if (!videoRef.current) return;
+  const startCamera = async (facingMode = "user", targetRef = faceVideoRef) => {
+    if (!targetRef.current) return;
     stopCamera();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode },
       });
       streamRef.current = stream;
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
+      targetRef.current.srcObject = stream;
+      await targetRef.current.play();
     } catch (err) {
       alert("Cannot access camera: " + err.message);
     }
@@ -70,14 +72,14 @@ export default function StudentLogin() {
     const nextIndex = (currentIndex + 1) % cameras.length;
     setSelectedCamera(cameras[nextIndex].deviceId);
     setQrKey((prev) => prev + 1);
-    // Restart hidden videoRef
+    // Restart hidden qrVideoRef
     navigator.mediaDevices
       .getUserMedia({ video: { deviceId: { exact: cameras[nextIndex].deviceId } } })
       .then((stream) => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+        if (qrVideoRef.current) {
+          qrVideoRef.current.srcObject = stream;
           streamRef.current = stream;
-          videoRef.current.play();
+          qrVideoRef.current.play();
         }
       });
   };
@@ -105,13 +107,13 @@ export default function StudentLogin() {
     let retryInterval;
 
     const checkFace = async () => {
-      if (!videoRef.current) return;
-      if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) return;
+      if (!faceVideoRef.current) return;
+      if (faceVideoRef.current.videoWidth === 0 || faceVideoRef.current.videoHeight === 0) return;
 
       const canvas = document.createElement("canvas");
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      canvas.width = faceVideoRef.current.videoWidth;
+      canvas.height = faceVideoRef.current.videoHeight;
+      canvas.getContext("2d").drawImage(faceVideoRef.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL("image/jpeg");
 
       try {
@@ -137,10 +139,10 @@ export default function StudentLogin() {
               const stream = await navigator.mediaDevices.getUserMedia({
                 video: { deviceId: { exact: backCam.deviceId } },
               });
-              if (videoRef.current) {
-                videoRef.current.srcObject = stream;
+              if (qrVideoRef.current) {
+                qrVideoRef.current.srcObject = stream;
                 streamRef.current = stream;
-                await videoRef.current.play();
+                await qrVideoRef.current.play();
               }
               setSelectedCamera(backCam.deviceId);
               setQrKey((prev) => prev + 1);
@@ -160,7 +162,7 @@ export default function StudentLogin() {
       }
     };
 
-    startCamera("user").then(() => {
+    startCamera("user", faceVideoRef).then(() => {
       retryInterval = setInterval(checkFace, 2000);
     });
 
@@ -190,11 +192,11 @@ export default function StudentLogin() {
 
       setSessionId(parsed.sessionId);
 
-      // Take snapshot from hidden videoRef
+      // Take snapshot from qrVideoRef
       const canvas = document.createElement("canvas");
-      canvas.width = videoRef.current?.videoWidth || 320;
-      canvas.height = videoRef.current?.videoHeight || 240;
-      canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      canvas.width = qrVideoRef.current?.videoWidth || 320;
+      canvas.height = qrVideoRef.current?.videoHeight || 240;
+      canvas.getContext("2d").drawImage(qrVideoRef.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL("image/jpeg");
 
       const res = await api.post("/markAttendanceLive", {
@@ -282,7 +284,7 @@ export default function StudentLogin() {
         <div>
           <p>Step: Face Verification</p>
           <video
-            ref={videoRef}
+            ref={faceVideoRef}
             autoPlay
             playsInline
             width="320"
@@ -314,7 +316,7 @@ export default function StudentLogin() {
           </div>
 
           {/* Hidden video feed for snapshot */}
-          <video ref={videoRef} autoPlay playsInline style={{ display: "none" }} />
+          <video ref={qrVideoRef} autoPlay playsInline style={{ display: "none" }} />
 
           <p>{status}</p>
         </div>
