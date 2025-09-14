@@ -123,7 +123,6 @@ export default function StudentDashboard() {
             stopCamera(); // stop face cam before QR step
             setStep("qr");
             setScannerActive(true);
-            // start QR snapshot feed
             startCamera("environment", qrVideoRef, selectedCamera);
           }, 1000);
         } else {
@@ -169,18 +168,15 @@ export default function StudentDashboard() {
         return;
       }
 
-      // Take snapshot from qrVideoRef
       const canvas = document.createElement("canvas");
       canvas.width = qrVideoRef.current?.videoWidth || 320;
       canvas.height = qrVideoRef.current?.videoHeight || 240;
       canvas.getContext("2d").drawImage(qrVideoRef.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL("image/jpeg");
 
-      // ✅ Include qrToken when calling backend
       const res = await api.post("/markAttendanceLive", {
         userId: loggedUser.userId,
         sessionId: parsed.sessionId,
-        qrToken: parsed.qrToken,
         imageBase64,
       });
 
@@ -217,7 +213,6 @@ export default function StudentDashboard() {
     setScannerActive(false);
   };
 
-  /* ---------------- UI ---------------- */
   return (
     <div style={{ padding: 20 }}>
       <h3>Student Login & Attendance</h3>
@@ -294,10 +289,7 @@ export default function StudentDashboard() {
               <p>Scanner paused</p>
             )}
           </div>
-
-          {/* Hidden video feed for snapshot */}
           <video ref={qrVideoRef} autoPlay playsInline style={{ display: "none" }} />
-
           <p>{status}</p>
         </div>
       )}
