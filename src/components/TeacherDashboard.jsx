@@ -1,4 +1,3 @@
-// frontend/src/components/TeacherDashboard.jsx
 import React, { useState, useEffect, useRef } from "react";
 import QRCode from "qrcode.react";
 import api from "./api";
@@ -203,6 +202,11 @@ const TeacherDashboard = ({ teacherId, classId }) => {
                       size={200}
                       className="mt-2"
                     />
+
+                    {console.log("Generated QR value:", {
+                      sessionId: session.sessionId,
+                      qrToken: session.qrToken,
+                    })}
 
                     {/* Countdown progress bar */}
                     <div className="w-full bg-gray-200 h-2 rounded mt-2">
