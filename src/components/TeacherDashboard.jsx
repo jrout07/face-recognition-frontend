@@ -37,8 +37,6 @@ const TeacherDashboard = ({ teacherId, classId }) => {
   // Auto-refresh QR token every 20s
   useEffect(() => {
     if (!session || session.finalized) return;
-
-    // clear any previous interval
     if (qrIntervalRef.current) clearInterval(qrIntervalRef.current);
 
     qrIntervalRef.current = setInterval(async () => {
@@ -55,7 +53,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
     return () => clearInterval(qrIntervalRef.current);
   }, [session]);
 
-  // Fetch attendance records (manual + auto-refresh)
+  // Fetch attendance records
   const fetchAttendance = async () => {
     if (!session) return;
     try {
@@ -73,18 +71,9 @@ const TeacherDashboard = ({ teacherId, classId }) => {
   // Auto-refresh attendance every 10s
   useEffect(() => {
     if (!session || session.finalized) return;
-
-    // clear old interval
-    if (attendanceIntervalRef.current)
-      clearInterval(attendanceIntervalRef.current);
-
-    // run immediately once
+    if (attendanceIntervalRef.current) clearInterval(attendanceIntervalRef.current);
     fetchAttendance();
-
-    attendanceIntervalRef.current = setInterval(() => {
-      fetchAttendance();
-    }, 10000);
-
+    attendanceIntervalRef.current = setInterval(fetchAttendance, 10000);
     return () => clearInterval(attendanceIntervalRef.current);
   }, [session]);
 
@@ -125,16 +114,9 @@ const TeacherDashboard = ({ teacherId, classId }) => {
       {session && (
         <div className="mt-6 bg-white p-4 rounded shadow">
           <h2 className="text-xl font-semibold mb-2">Active Session</h2>
-          <p>
-            <strong>Session ID:</strong> {session.sessionId}
-          </p>
-          <p>
-            <strong>Class:</strong> {session.classId}
-          </p>
-          <p>
-            <strong>Valid Until:</strong>{" "}
-            {new Date(session.validUntil).toLocaleString()}
-          </p>
+          <p><strong>Session ID:</strong> {session.sessionId}</p>
+          <p><strong>Class:</strong> {session.classId}</p>
+          <p><strong>Valid Until:</strong> {new Date(session.validUntil).toLocaleString()}</p>
           <p>
             <strong>Status:</strong>{" "}
             {session.finalized ? (
@@ -147,9 +129,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
           {!session.finalized && (
             <>
               <div className="mt-4">
-                <h3 className="font-medium">
-                  QR Code (refreshes every 20s):
-                </h3>
+                <h3 className="font-medium">QR Code (refreshes every 20s):</h3>
                 <QRCode
                   value={JSON.stringify({
                     sessionId: session.sessionId,
