@@ -13,7 +13,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
   const [timeLeft, setTimeLeft] = useState(20); // countdown for QR refresh
   const attendanceIntervalRef = useRef(null);
 
-  // Face verification
+  /* -------------------- Face verification -------------------- */
   useEffect(() => {
     const verifyFace = async () => {
       try {
@@ -53,7 +53,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
     if (step === "verify") verifyFace();
   }, [step, teacherId]);
 
-  // Create session
+  /* -------------------- Create session -------------------- */
   const createSession = async () => {
     try {
       setLoading(true);
@@ -64,11 +64,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
         durationMinutes: 10,
       });
       if (res.data.success) {
-        const newSession = {
-          ...res.data.session,
-          qrPayload: res.data.qrPayload, // ✅ backend sends as string
-        };
-        setSession(newSession);
+        setSession(res.data.session);
         setAttendance([]);
       } else {
         setError(res.data.error || "Failed to create session");
@@ -80,28 +76,28 @@ const TeacherDashboard = ({ teacherId, classId }) => {
     }
   };
 
-  // Countdown + QR refresh in a single interval
+  /* -------------------- Refresh QR -------------------- */
+  const refreshQr = async () => {
+    try {
+      const res = await api.get(`/teacher/getSession/${session.classId}`);
+      if (res.data.success) {
+        setSession(res.data.session);
+      }
+    } catch (err) {
+      console.error("Error refreshing session:", err);
+    }
+  };
+
+  /* -------------------- Countdown timer -------------------- */
   useEffect(() => {
     if (!session || session.finalized) return;
 
     setTimeLeft(20);
 
-    const timer = setInterval(async () => {
+    const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          // refresh QR when countdown hits 0
-          api
-            .get(`/teacher/getSession/${session.classId}`)
-            .then((res) => {
-              if (res.data.success) {
-                setSession({
-                  ...res.data.session,
-                  qrPayload: res.data.qrPayload,
-                });
-              }
-            })
-            .catch((err) => console.error("Error refreshing session:", err));
-
+          refreshQr();
           return 20; // reset countdown
         }
         return prev - 1;
@@ -111,7 +107,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
     return () => clearInterval(timer);
   }, [session]);
 
-  // Attendance
+  /* -------------------- Attendance -------------------- */
   const fetchAttendance = async () => {
     if (!session) return;
     try {
@@ -137,6 +133,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
     return () => clearInterval(attendanceIntervalRef.current);
   }, [session]);
 
+  /* -------------------- Finalize attendance -------------------- */
   const finalizeAttendance = async () => {
     if (!session) return;
     try {
@@ -199,7 +196,10 @@ const TeacherDashboard = ({ teacherId, classId }) => {
                   <div className="mt-4">
                     <h3 className="font-medium">QR Code (refreshes every 20s):</h3>
                     <QRCode
-                      value={session.qrPayload} // ✅ no extra stringify
+                      value={JSON.stringify({
+                        sessionId: session.sessionId,
+                        qrToken: session.qrToken,
+                      })}
                       size={200}
                       className="mt-2"
                     />
