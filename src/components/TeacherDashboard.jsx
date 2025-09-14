@@ -64,7 +64,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
         durationMinutes: 10,
       });
       if (res.data.success) {
-        setSession(res.data.session);
+        setSession({ ...res.data.session, qrPayload: res.data.qrPayload });
         setAttendance([]);
       } else {
         setError(res.data.error || "Failed to create session");
@@ -76,7 +76,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
     }
   };
 
-  // 3. Auto-refresh QR token every 20s
+  // 3. Auto-refresh QR token every 60s (backend sets expiry ~60s)
   useEffect(() => {
     if (!session || session.finalized) return;
 
@@ -86,12 +86,12 @@ const TeacherDashboard = ({ teacherId, classId }) => {
       try {
         const res = await api.get(`/teacher/getSession/${session.classId}`);
         if (res.data.success) {
-          setSession(res.data.session);
+          setSession({ ...res.data.session, qrPayload: res.data.qrPayload });
         }
       } catch (err) {
         console.error("Error refreshing session:", err);
       }
-    }, 20000);
+    }, 60000);
 
     return () => clearInterval(qrIntervalRef.current);
   }, [session]);
@@ -189,12 +189,9 @@ const TeacherDashboard = ({ teacherId, classId }) => {
               {!session.finalized && (
                 <>
                   <div className="mt-4">
-                    <h3 className="font-medium">QR Code (refreshes every 20s):</h3>
+                    <h3 className="font-medium">QR Code (auto-refreshes ~60s):</h3>
                     <QRCode
-                      value={JSON.stringify({
-                        sessionId: session.sessionId,
-                        qrToken: session.qrToken,
-                      })}
+                      value={session.qrPayload}
                       size={200}
                       className="mt-2"
                     />
