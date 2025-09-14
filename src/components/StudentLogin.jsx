@@ -1,4 +1,3 @@
-// frontend/src/components/StudentDashboard.jsx
 import React, { useState, useEffect, useRef } from "react";
 import QrScanner from "qr-scanner";
 import api from "./api";
@@ -80,15 +79,22 @@ const StudentDashboard = ({ loggedUser }) => {
 
     try {
       const qrText = data.data || data.text || data;
-      let parsed;
+      console.log("Scanned QR raw:", qrText);
 
+      let parsed;
       try {
-        parsed = JSON.parse(qrText); // QR is always JSON { sessionId, qrToken }
-      } catch {
+        parsed = JSON.parse(qrText);
+        if (typeof parsed === "string") {
+          parsed = JSON.parse(parsed);
+        }
+      } catch (err) {
+        console.error("QR parse failed:", err, "qrText was:", qrText);
         setStatus("⚠️ Invalid QR format");
         setQrBorderColor("red");
         return;
       }
+
+      console.log("Parsed QR:", parsed);
 
       if (!parsed.sessionId || !parsed.qrToken) {
         setStatus("⚠️ Expired/invalid QR — waiting for new one...");
