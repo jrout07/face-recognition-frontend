@@ -37,6 +37,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
   // Auto-refresh QR token every 20s
   useEffect(() => {
     if (!session || session.finalized) return;
+
     if (qrIntervalRef.current) clearInterval(qrIntervalRef.current);
 
     qrIntervalRef.current = setInterval(async () => {
@@ -71,9 +72,15 @@ const TeacherDashboard = ({ teacherId, classId }) => {
   // Auto-refresh attendance every 10s
   useEffect(() => {
     if (!session || session.finalized) return;
+
     if (attendanceIntervalRef.current) clearInterval(attendanceIntervalRef.current);
-    fetchAttendance();
-    attendanceIntervalRef.current = setInterval(fetchAttendance, 10000);
+
+    fetchAttendance(); // run immediately once
+
+    attendanceIntervalRef.current = setInterval(() => {
+      fetchAttendance();
+    }, 10000);
+
     return () => clearInterval(attendanceIntervalRef.current);
   }, [session]);
 
@@ -116,7 +123,10 @@ const TeacherDashboard = ({ teacherId, classId }) => {
           <h2 className="text-xl font-semibold mb-2">Active Session</h2>
           <p><strong>Session ID:</strong> {session.sessionId}</p>
           <p><strong>Class:</strong> {session.classId}</p>
-          <p><strong>Valid Until:</strong> {new Date(session.validUntil).toLocaleString()}</p>
+          <p>
+            <strong>Valid Until:</strong>{" "}
+            {new Date(session.validUntil).toLocaleString()}
+          </p>
           <p>
             <strong>Status:</strong>{" "}
             {session.finalized ? (
