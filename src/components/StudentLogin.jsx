@@ -160,8 +160,13 @@ export default function StudentDashboard() {
       }
 
       if (!parsed.sessionId || !parsed.qrToken) {
-        setStatus("⚠️ Expired or invalid QR code");
+        setStatus("⚠️ Expired QR — waiting for new one...");
         setQrBorderColor("red");
+        // auto-reset border & status so scanner continues
+        setTimeout(() => {
+          setQrBorderColor("gray");
+          setStatus("⏳ Waiting for valid QR...");
+        }, 1500);
         return;
       }
 
@@ -189,11 +194,14 @@ export default function StudentDashboard() {
       } else {
         setStatus("❌ " + (res.data.error || "Failed to mark attendance"));
         setQrBorderColor("red");
+        // auto-reset to keep scanning
+        setTimeout(() => setQrBorderColor("gray"), 1500);
       }
     } catch (err) {
       console.error("QR scan error:", err);
-      setStatus("⚠️ QR error — retry with next code");
+      setStatus("⚠️ QR error — waiting for next code");
       setQrBorderColor("orange");
+      setTimeout(() => setQrBorderColor("gray"), 1500);
     }
   };
 
