@@ -81,8 +81,13 @@ const StudentDashboard = ({ loggedUser }) => {
     try {
       const qrText = data.data || data.text || data;
       let parsed;
+
       try {
-        parsed = JSON.parse(qrText); // ✅ always JSON string from Teacher
+        parsed = JSON.parse(qrText);
+        if (typeof parsed === "string") {
+          // handle double-encoded payload
+          parsed = JSON.parse(parsed);
+        }
       } catch {
         setStatus("⚠️ Invalid QR format");
         setQrBorderColor("red");
