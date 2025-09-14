@@ -1,171 +1,150 @@
+// frontend/src/components/StudentDashboard.jsx
 import React, { useRef, useState, useEffect } from "react";
 import QrScanner from "react-qr-scanner";
 import api from "./api";
 
-export default function StudentLogin() {
+export default function StudentDashboard() {
   const [form, setForm] = useState({ userId: "", password: "" });
   const [loggedUser, setLoggedUser] = useState(null);
   const [step, setStep] = useState("login"); // login -> face -> qr
   const [status, setStatus] = useState("");
-  const [sessionId, setSessionId] = useState("");
   const [faceBorderColor, setFaceBorderColor] = useState("gray");
   const [qrBorderColor, setQrBorderColor] = useState("gray");
   const [qrKey, setQrKey] = useState(0);
   const [scannerActive, setScannerActive] = useState(true);
 
-  const faceVideoRef = useRef(null); // for face verification (front camera)
-  const snapshotVideoRef = useRef(null); // for snapshots during QR step (back camera)
-  const snapshotStreamRef = useRef(null);
+  const faceVideoRef = useRef(null);
+  const qrVideoRef = useRef(null);
+  const streamRef = useRef(null);
 
   const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState(null);
 
-  /* ---------------- Camera list ---------------- */
+  /* ---------------- Camera Helpers ---------------- */
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (faceVideoRef.current) faceVideoRef.current.srcObject = null;
+    if (qrVideoRef.current) qrVideoRef.current.srcObject = null;
+  };
+
+  const startCamera = async (facingMode = "user", targetRef = faceVideoRef) => {
+    if (!targetRef.current) return;
+    stopCamera();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode },
+      });
+      streamRef.current = stream;
+      targetRef.current.srcObject = stream;
+      await targetRef.current.play();
+    } catch (err) {
+      alert("Cannot access camera: " + err.message);
+    }
+  };
+
+  /* ---------------- QR Camera Setup ---------------- */
   useEffect(() => {
-    (async () => {
+    async function loadCameras() {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter((d) => d.kind === "videoinput");
         setCameras(videoDevices);
-        // default: prefer front for face verification
-        const front = videoDevices.find((d) => d.label.toLowerCase().includes("front"));
-        setSelectedCamera(front ? front.deviceId : videoDevices[0]?.deviceId);
+
+        const backCam = videoDevices.find(
+          (d) =>
+            d.label.toLowerCase().includes("back") ||
+            d.label.toLowerCase().includes("rear")
+        );
+        setSelectedCamera(backCam ? backCam.deviceId : videoDevices[0]?.deviceId);
       } catch (err) {
-        console.error("device enumerate error:", err);
+        console.error("Error loading cameras:", err);
       }
-    })();
+    }
+    loadCameras();
   }, []);
 
-  /* ---------------- camera helpers ---------------- */
-  const startFaceCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-      if (faceVideoRef.current) faceVideoRef.current.srcObject = stream;
-      await new Promise((res) => {
-        if (faceVideoRef.current.readyState >= 2) return res();
-        faceVideoRef.current.addEventListener("loadedmetadata", res, { once: true });
-      });
-      faceVideoRef.current.play().catch(() => {});
-    } catch (err) {
-      console.error("startFaceCamera error:", err);
-      setStatus("⚠️ Cannot access camera");
-    }
-  };
-
-  const startSnapshotCamera = async (deviceId) => {
-    // used to capture a frame when scanning QR
-    try {
-      if (snapshotStreamRef.current) {
-        snapshotStreamRef.current.getTracks().forEach((t) => t.stop());
-        snapshotStreamRef.current = null;
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: deviceId ? { exact: deviceId } : undefined } });
-      snapshotStreamRef.current = stream;
-      if (snapshotVideoRef.current) snapshotVideoRef.current.srcObject = stream;
-      await new Promise((res) => {
-        if (snapshotVideoRef.current.readyState >= 2) return res();
-        snapshotVideoRef.current.addEventListener("loadedmetadata", res, { once: true });
-      });
-      snapshotVideoRef.current.play().catch(() => {});
-    } catch (err) {
-      console.error("startSnapshotCamera error:", err);
-      setStatus("⚠️ Cannot open snapshot camera");
-    }
-  };
-
-  const stopSnapshotCamera = () => {
-    try {
-      if (snapshotStreamRef.current) {
-        snapshotStreamRef.current.getTracks().forEach((t) => t.stop());
-        snapshotStreamRef.current = null;
-      }
-      if (snapshotVideoRef.current) snapshotVideoRef.current.srcObject = null;
-    } catch (err) {
-      console.warn("stopSnapshotCamera:", err);
-    }
-  };
-
-  const stopFaceCamera = () => {
-    try {
-      const s = faceVideoRef.current?.srcObject;
-      if (s && s.getTracks) s.getTracks().forEach((t) => t.stop());
-      if (faceVideoRef.current) faceVideoRef.current.srcObject = null;
-    } catch (err) {
-      console.warn("stopFaceCamera:", err);
-    }
+  const swapCamera = () => {
+    if (cameras.length < 2) return;
+    const currentIndex = cameras.findIndex((c) => c.deviceId === selectedCamera);
+    const nextIndex = (currentIndex + 1) % cameras.length;
+    setSelectedCamera(cameras[nextIndex].deviceId);
+    setQrKey((prev) => prev + 1);
   };
 
   /* ---------------- Login ---------------- */
   const handleLogin = async () => {
-    if (!form.userId || !form.password) return alert("Enter userId and password");
+    if (!form.userId || !form.password)
+      return alert("Enter userId and password");
     try {
       const res = await api.post("/login", form);
       if (res.data.success && res.data.role === "student") {
         setLoggedUser(res.data);
         setStep("face");
+        setFaceBorderColor("gray");
         setStatus("Initializing camera...");
-        await startFaceCamera();
-      } else {
-        alert(res.data.error || "Login failed");
-      }
+      } else alert(res.data.error || "Login failed");
     } catch (err) {
-      alert("Login error: " + (err?.response?.data?.error || err.message));
+      alert("Login error: " + (err.response?.data?.error || err.message));
     }
   };
 
-  /* ---------------- Face verification loop ---------------- */
+  /* ---------------- Face Verification ---------------- */
   useEffect(() => {
     if (step !== "face" || !loggedUser) return;
-    let intervalId = null;
+    let retryInterval;
 
-    const doCheck = async () => {
+    const checkFace = async () => {
       if (!faceVideoRef.current) return;
-      const vw = faceVideoRef.current.videoWidth;
-      const vh = faceVideoRef.current.videoHeight;
-      if (!vw || !vh) return;
+      if (faceVideoRef.current.videoWidth === 0 || faceVideoRef.current.videoHeight === 0) return;
 
       const canvas = document.createElement("canvas");
-      canvas.width = vw;
-      canvas.height = vh;
-      canvas.getContext("2d").drawImage(faceVideoRef.current, 0, 0, vw, vh);
+      canvas.width = faceVideoRef.current.videoWidth;
+      canvas.height = faceVideoRef.current.videoHeight;
+      canvas.getContext("2d").drawImage(faceVideoRef.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL("image/jpeg");
 
       try {
-        const res = await api.post("/verifyFaceOnly", { userId: loggedUser.userId, imageBase64 });
-        if (res.data.success) {
-          setStatus("✅ Face verified — now scan QR");
+        const faceRes = await api.post("/verifyFaceOnly", {
+          userId: loggedUser.userId,
+          imageBase64,
+        });
+
+        if (faceRes.data.success) {
+          setStatus("✅ Face verified! Moving to QR...");
           setFaceBorderColor("limegreen");
-          stopFaceCamera();
-          // prepare snapshot camera (prefer back device)
-          const backCam = cameras.find((d) => d.label.toLowerCase().includes("back") || d.label.toLowerCase().includes("rear"));
-          const deviceId = backCam ? backCam.deviceId : selectedCamera;
-          await startSnapshotCamera(deviceId);
-          setSelectedCamera(deviceId);
-          setStep("qr");
+          clearInterval(retryInterval);
+
+          setTimeout(() => {
+            setStep("qr");
+            setScannerActive(true);
+          }, 1000);
         } else {
-          setStatus("❌ Face not matched — retrying...");
+          setStatus("❌ Face not matched, retrying...");
           setFaceBorderColor("red");
-          setTimeout(() => setFaceBorderColor("gray"), 800);
+          setTimeout(() => setFaceBorderColor("gray"), 1000);
         }
       } catch (err) {
-        console.error("verifyFaceOnly error:", err);
-        setStatus("⚠️ Error verifying face");
+        console.error("Face check error:", err);
+        setStatus("⚠️ Error verifying face...");
       }
     };
 
-    intervalId = setInterval(doCheck, 2200);
-    // run immediately as well
-    doCheck();
+    startCamera("user", faceVideoRef).then(() => {
+      retryInterval = setInterval(checkFace, 2000);
+    });
 
-    return () => clearInterval(intervalId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, loggedUser, cameras, selectedCamera]);
+    return () => clearInterval(retryInterval);
+  }, [step, loggedUser]);
 
-  /* ---------------- QR Scan handler ---------------- */
+  /* ---------------- QR Scan + Attendance ---------------- */
   const handleScan = async (data) => {
     if (!data || !scannerActive) return;
+
     try {
-      const qrText = data?.text || data;
+      const qrText = data.text || data;
       let parsed;
       try {
         parsed = JSON.parse(qrText);
@@ -174,72 +153,55 @@ export default function StudentLogin() {
         setQrBorderColor("red");
         return;
       }
+
       if (!parsed.sessionId || !parsed.qrToken) {
         setStatus("⚠️ Expired or invalid QR code");
         setQrBorderColor("red");
         return;
       }
-      setSessionId(parsed.sessionId);
 
-      // Take snapshot from snapshotVideoRef (we started the same device)
-      if (!snapshotVideoRef.current) {
-        setStatus("⚠️ Snapshot camera not ready");
-        return;
-      }
-      const vw = snapshotVideoRef.current.videoWidth || 320;
-      const vh = snapshotVideoRef.current.videoHeight || 240;
+      // Take snapshot from qrVideoRef
       const canvas = document.createElement("canvas");
-      canvas.width = vw;
-      canvas.height = vh;
-      canvas.getContext("2d").drawImage(snapshotVideoRef.current, 0, 0, vw, vh);
+      canvas.width = qrVideoRef.current?.videoWidth || 320;
+      canvas.height = qrVideoRef.current?.videoHeight || 240;
+      canvas.getContext("2d").drawImage(qrVideoRef.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL("image/jpeg");
 
-      const res = await api.post("/markAttendanceLive", { userId: loggedUser.userId, sessionId: parsed.sessionId, imageBase64 });
+      const res = await api.post("/markAttendanceLive", {
+        userId: loggedUser.userId,
+        sessionId: parsed.sessionId,
+        imageBase64,
+      });
+
       if (res.data.success) {
-        setStatus("✅ Attendance marked (pending teacher finalize)");
+        setStatus("✅ Attendance marked (awaiting teacher finalize)");
         setQrBorderColor("limegreen");
         setScannerActive(false);
-        // optionally stop snapshot camera to save power
-        stopSnapshotCamera();
+      } else if (res.data.error?.toLowerCase().includes("already")) {
+        setStatus("✅ Already marked (pending finalize)");
+        setQrBorderColor("limegreen");
+        setScannerActive(false);
       } else {
         setStatus("❌ " + (res.data.error || "Failed to mark attendance"));
         setQrBorderColor("red");
       }
     } catch (err) {
-      console.error("handleScan error:", err);
-      setStatus("⚠️ QR scan error");
+      console.error("QR scan error:", err);
+      setStatus("⚠️ QR error — retry with next code");
       setQrBorderColor("orange");
     }
   };
 
-  const handleError = (err) => {
-    console.error("QR scanner error:", err);
-    setStatus("⚠️ QR scanner error");
-    setQrBorderColor("red");
-  };
-
-  const swapCamera = async () => {
-    if (!cameras.length) return;
-    const idx = cameras.findIndex((c) => c.deviceId === selectedCamera);
-    const next = cameras[(idx + 1) % cameras.length];
-    setSelectedCamera(next.deviceId);
-    setQrKey((p) => p + 1);
-    // restart snapshot camera to new device
-    await startSnapshotCamera(next.deviceId);
-  };
-
   /* ---------------- Logout ---------------- */
   const handleLogout = () => {
-    stopFaceCamera();
-    stopSnapshotCamera();
+    stopCamera();
     setLoggedUser(null);
     setStep("login");
     setForm({ userId: "", password: "" });
     setStatus("");
-    setSessionId("");
     setFaceBorderColor("gray");
     setQrBorderColor("gray");
-    setScannerActive(true);
+    setScannerActive(false);
   };
 
   /* ---------------- UI ---------------- */
@@ -248,48 +210,80 @@ export default function StudentLogin() {
       <h3>Student Login & Attendance</h3>
 
       {loggedUser && (
-        <button onClick={handleLogout} style={{ position: "fixed", top: 10, right: 10, background: "#f44336", color: "#fff", padding: 8 }}>
+        <button
+          onClick={handleLogout}
+          style={{
+            position: "fixed",
+            top: 10,
+            right: 10,
+            padding: "8px 16px",
+            backgroundColor: "#f44336",
+            color: "white",
+            border: "none",
+            borderRadius: 5,
+            cursor: "pointer",
+          }}
+        >
           Logout
         </button>
       )}
 
       {step === "login" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <input placeholder="User ID" value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })} />
-          <input type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-          <button onClick={handleLogin} style={{ background: "#28a745", color: "#fff", padding: 8 }}>Login</button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input
+            placeholder="User ID"
+            value={form.userId}
+            onChange={(e) => setForm({ ...form, userId: e.target.value })}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
+          <button onClick={handleLogin} style={{ backgroundColor: "#28a745", color: "white" }}>
+            Login
+          </button>
         </div>
       )}
 
       {step === "face" && (
         <div>
           <p>Step: Face Verification</p>
-          <video ref={faceVideoRef} autoPlay playsInline width={320} height={240} style={{ border: `4px solid ${faceBorderColor}`, borderRadius: 6 }} />
+          <video
+            ref={faceVideoRef}
+            autoPlay
+            playsInline
+            width="320"
+            height="240"
+            style={{ border: `5px solid ${faceBorderColor}`, borderRadius: 5 }}
+          />
           <p>{status}</p>
         </div>
       )}
 
       {step === "qr" && (
-        <div style={{ width: 360 }}>
+        <div style={{ position: "relative", width: 320 }}>
           <p>Step: Scan Teacher QR to mark attendance</p>
-          <button onClick={swapCamera} style={{ marginBottom: 8, padding: 6 }}>Swap Camera</button>
-          <div style={{ border: `4px solid ${qrBorderColor}`, padding: 6, borderRadius: 6 }}>
+          <button onClick={swapCamera}>Swap Camera</button>
+          <div style={{ border: `5px solid ${qrBorderColor}`, borderRadius: 5 }}>
             {scannerActive ? (
               <QrScanner
                 key={qrKey}
                 delay={400}
-                onError={handleError}
-                onScan={handleScan}
                 style={{ width: "100%" }}
-                constraints={selectedCamera ? { video: { deviceId: { exact: selectedCamera } } } : undefined}
+                onScan={handleScan}
+                constraints={{
+                  video: selectedCamera ? { deviceId: { exact: selectedCamera } } : undefined,
+                }}
               />
             ) : (
-              <div style={{ padding: 14, textAlign: "center" }}>Scanner paused</div>
+              <p>Scanner paused</p>
             )}
           </div>
 
-          {/* hidden snapshot video from same device for frame capture */}
-          <video ref={snapshotVideoRef} autoPlay playsInline style={{ display: "none" }} />
+          {/* Hidden video feed for snapshot */}
+          <video ref={qrVideoRef} autoPlay playsInline style={{ display: "none" }} />
 
           <p>{status}</p>
         </div>
