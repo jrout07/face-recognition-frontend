@@ -30,13 +30,15 @@ export default function StudentDashboard() {
     if (qrVideoRef.current) qrVideoRef.current.srcObject = null;
   };
 
-  const startCamera = async (facingMode = "user", targetRef = faceVideoRef) => {
+  const startCamera = async (facingMode = "user", targetRef = faceVideoRef, deviceId = null) => {
     if (!targetRef.current) return;
     stopCamera();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode },
-      });
+      const constraints = deviceId
+        ? { video: { deviceId: { exact: deviceId } } }
+        : { video: { facingMode } };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
       targetRef.current.srcObject = stream;
       await targetRef.current.play();
@@ -118,8 +120,11 @@ export default function StudentDashboard() {
           clearInterval(retryInterval);
 
           setTimeout(() => {
+            stopCamera(); // stop face cam before QR step
             setStep("qr");
             setScannerActive(true);
+            // start QR snapshot feed
+            startCamera("environment", qrVideoRef, selectedCamera);
           }, 1000);
         } else {
           setStatus("❌ Face not matched, retrying...");
