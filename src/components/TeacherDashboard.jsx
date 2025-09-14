@@ -11,7 +11,6 @@ const TeacherDashboard = ({ teacherId, classId }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [timeLeft, setTimeLeft] = useState(20); // countdown for QR refresh
-  const qrIntervalRef = useRef(null);
   const attendanceIntervalRef = useRef(null);
 
   // Face verification
@@ -67,7 +66,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
       if (res.data.success) {
         const newSession = {
           ...res.data.session,
-          qrPayload: res.data.qrPayload, // ✅ backend must send as string
+          qrPayload: res.data.qrPayload, // ✅ backend sends as string
         };
         setSession(newSession);
         setAttendance([]);
@@ -81,38 +80,35 @@ const TeacherDashboard = ({ teacherId, classId }) => {
     }
   };
 
-  // Refresh QR + countdown timer
+  // Countdown + QR refresh in a single interval
   useEffect(() => {
     if (!session || session.finalized) return;
 
     setTimeLeft(20);
 
-    // countdown
-    const timer = setInterval(() => {
-      setTimeLeft((t) => (t > 0 ? t - 1 : 0));
+    const timer = setInterval(async () => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          // refresh QR when countdown hits 0
+          api
+            .get(`/teacher/getSession/${session.classId}`)
+            .then((res) => {
+              if (res.data.success) {
+                setSession({
+                  ...res.data.session,
+                  qrPayload: res.data.qrPayload,
+                });
+              }
+            })
+            .catch((err) => console.error("Error refreshing session:", err));
+
+          return 20; // reset countdown
+        }
+        return prev - 1;
+      });
     }, 1000);
 
-    // QR refresh every 20s
-    if (qrIntervalRef.current) clearInterval(qrIntervalRef.current);
-    qrIntervalRef.current = setInterval(async () => {
-      try {
-        const res = await api.get(`/teacher/getSession/${session.classId}`);
-        if (res.data.success) {
-          setSession({
-            ...res.data.session,
-            qrPayload: res.data.qrPayload,
-          });
-          setTimeLeft(20); // reset countdown after refresh
-        }
-      } catch (err) {
-        console.error("Error refreshing session:", err);
-      }
-    }, 20000);
-
-    return () => {
-      clearInterval(timer);
-      clearInterval(qrIntervalRef.current);
-    };
+    return () => clearInterval(timer);
   }, [session]);
 
   // Attendance
