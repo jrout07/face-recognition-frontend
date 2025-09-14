@@ -1,23 +1,21 @@
+// frontend/src/components/StudentDashboard.jsx
 import React, { useState, useEffect, useRef } from "react";
 import QrScanner from "qr-scanner";
 import api from "./api";
 
 const StudentDashboard = ({ loggedUser }) => {
-  const [step, setStep] = useState("verify"); // verify → scanQR → done
+  const [step, setStep] = useState("verify");
   const [status, setStatus] = useState("⏳ Starting face verification...");
   const [qrBorderColor, setQrBorderColor] = useState("gray");
   const [scannerActive, setScannerActive] = useState(false);
   const qrVideoContainerRef = useRef(null);
   const qrScannerRef = useRef(null);
 
-  /* -------------------- Face Verification -------------------- */
+  // -------------------- Face Verification --------------------
   useEffect(() => {
     const verifyFace = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" },
-        });
-
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         const videoElem = document.createElement("video");
         videoElem.srcObject = stream;
         await videoElem.play();
@@ -26,32 +24,28 @@ const StudentDashboard = ({ loggedUser }) => {
         canvas.width = 320;
         canvas.height = 240;
         canvas.getContext("2d").drawImage(videoElem, 0, 0, canvas.width, canvas.height);
-
         const imageBase64 = canvas.toDataURL("image/jpeg");
 
-        const res = await api.post("/verifyFaceOnly", {
-          userId: loggedUser.userId,
-          imageBase64,
-        });
+        const res = await api.post("/verifyFaceOnly", { userId: loggedUser.userId, imageBase64 });
 
         stream.getTracks().forEach((t) => t.stop());
 
         if (res.data.success) {
-          setStatus("✅ Face verified! Proceed to scan QR.");
+          setStatus("✅ Face verified! Scan the QR now.");
           setStep("scanQR");
         } else {
-          setStatus("❌ Face not recognized. Retry login.");
+          setStatus("❌ Face not recognized.");
         }
       } catch (err) {
         console.error("Face verification error:", err);
-        setStatus("⚠️ Error verifying face. Please retry.");
+        setStatus("⚠️ Error verifying face.");
       }
     };
 
     if (step === "verify") verifyFace();
   }, [step, loggedUser.userId]);
 
-  /* -------------------- Setup QR Scanner -------------------- */
+  // -------------------- Setup QR Scanner --------------------
   useEffect(() => {
     if (step !== "scanQR" || !qrVideoContainerRef.current) return;
 
@@ -59,60 +53,46 @@ const StudentDashboard = ({ loggedUser }) => {
     qrVideoContainerRef.current.innerHTML = "";
     qrVideoContainerRef.current.appendChild(videoElem);
 
-    qrScannerRef.current = new QrScanner(
-      videoElem,
-      (result) => handleScan(result),
-      { highlightScanRegion: true, highlightCodeOutline: true }
-    );
+    qrScannerRef.current = new QrScanner(videoElem, (result) => handleScan(result), {
+      highlightScanRegion: true,
+      highlightCodeOutline: true,
+    });
 
     qrScannerRef.current.start();
     setScannerActive(true);
 
-    return () => {
-      qrScannerRef.current?.stop();
-    };
+    return () => qrScannerRef.current?.stop();
   }, [step]);
 
-  /* -------------------- Handle QR Scan -------------------- */
+  // -------------------- Handle QR Scan --------------------
   const handleScan = async (data) => {
     if (!data || !scannerActive) return;
 
     try {
       const qrText = data.data || data.text || data;
-      console.log("Scanned QR raw:", qrText);
+      console.log("Student scanned QR raw:", qrText);
 
       let parsed;
       try {
         parsed = JSON.parse(qrText);
-        if (typeof parsed === "string") {
-          parsed = JSON.parse(parsed);
-        }
-      } catch (err) {
-        console.error("QR parse failed:", err, "qrText was:", qrText);
-        setStatus("⚠️ Invalid QR format");
+        if (typeof parsed === "string") parsed = JSON.parse(parsed);
+      } catch {
+        console.error("Failed to parse QR:", qrText);
+        setStatus("⚠️ Invalid QR");
         setQrBorderColor("red");
         return;
       }
 
-      console.log("Parsed QR:", parsed);
+      console.log("Student parsed QR:", parsed);
 
       if (!parsed.sessionId || !parsed.qrToken) {
-        setStatus("⚠️ Expired/invalid QR — waiting for new one...");
+        setStatus("⚠️ Invalid or expired QR");
         setQrBorderColor("red");
-        setTimeout(() => {
-          setQrBorderColor("gray");
-          setStatus("⏳ Waiting for valid QR...");
-        }, 1500);
         return;
       }
 
-      // Take snapshot for face proof
+      // Take snapshot
       const videoElem = qrVideoContainerRef.current.querySelector("video");
-      if (!videoElem) {
-        setStatus("⚠️ Camera not ready");
-        return;
-      }
-
       const canvas = document.createElement("canvas");
       canvas.width = videoElem.videoWidth || 320;
       canvas.height = videoElem.videoHeight || 240;
@@ -127,55 +107,33 @@ const StudentDashboard = ({ loggedUser }) => {
       });
 
       if (res.data.success) {
-        setStatus("✅ Attendance marked (awaiting teacher finalize)");
-        setQrBorderColor("limegreen");
-        setScannerActive(false);
-        qrScannerRef.current?.stop();
-        setStep("done");
-      } else if (res.data.error?.toLowerCase().includes("already")) {
-        setStatus("✅ Already marked (pending finalize)");
+        setStatus("✅ Attendance marked!");
         setQrBorderColor("limegreen");
         setScannerActive(false);
         qrScannerRef.current?.stop();
         setStep("done");
       } else {
-        setStatus("❌ " + (res.data.error || "Failed to mark attendance"));
+        setStatus("❌ " + (res.data.error || "Failed"));
         setQrBorderColor("red");
-        setTimeout(() => setQrBorderColor("gray"), 1500);
       }
     } catch (err) {
       console.error("QR scan error:", err);
-      setStatus("⚠️ QR error — waiting for next code");
+      setStatus("⚠️ QR error");
       setQrBorderColor("orange");
-      setTimeout(() => setQrBorderColor("gray"), 1500);
     }
   };
 
-  /* -------------------- UI -------------------- */
   return (
     <div className="p-6 bg-gray-100 min-h-screen">
-      <h1 className="text-xl font-bold mb-4">Student Login & Attendance</h1>
-
-      {step === "verify" && (
-        <p className="text-blue-600 font-medium">{status}</p>
-      )}
-
+      <h1 className="text-xl font-bold mb-4">Student Dashboard</h1>
+      {step === "verify" && <p>{status}</p>}
       {step === "scanQR" && (
         <div className="bg-white p-4 rounded shadow">
-          <p className="mb-2">{status}</p>
-          <div
-            ref={qrVideoContainerRef}
-            className="border-4 rounded-lg overflow-hidden"
-            style={{ borderColor: qrBorderColor, width: "100%", maxWidth: 400 }}
-          />
+          <p>{status}</p>
+          <div ref={qrVideoContainerRef} className="border-4 rounded-lg" style={{ borderColor: qrBorderColor, width: "100%", maxWidth: 400 }} />
         </div>
       )}
-
-      {step === "done" && (
-        <div className="bg-green-100 text-green-700 p-4 rounded shadow">
-          🎉 Attendance recorded successfully!
-        </div>
-      )}
+      {step === "done" && <div className="bg-green-100 p-4 rounded">🎉 Attendance recorded!</div>}
     </div>
   );
 };
