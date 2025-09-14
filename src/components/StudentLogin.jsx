@@ -153,58 +153,75 @@ export default function StudentLogin() {
     return () => clearInterval(retryInterval);
   }, [step, loggedUser]);
 
-  /* ---------------- QR Scan ---------------- */
-  const handleScan = async data => {
-    if (!data || !scannerActive) return;
+ /* ---------------- QR Scan ---------------- */
+const handleScan = async data => {
+  if (!data || !scannerActive) return;
 
+  try {
+    const qrText = data.text || data;
+    let parsed;
     try {
-      const qrText = data.text || data;
-      let parsed;
-      try {
-        parsed = JSON.parse(qrText);
-      } catch {
-        setStatus('⚠️ Invalid QR format');
-        setQrBorderColor('red');
-        return;
-      }
-
-      if (!parsed.sessionId || !parsed.qrToken) {
-        setStatus('⚠️ Expired or invalid QR code');
-        setQrBorderColor('red');
-        return;
-      }
-
-      setSessionId(parsed.sessionId);
-
-      const res = await api.post('/attendance/mark', {
-        userId: loggedUser.userId,
-        sessionId: parsed.sessionId,
-        qrToken: parsed.qrToken,
-      });
-
-      if (res.data.success) {
-        setStatus('✅ Attendance marked');
-        setQrBorderColor('limegreen');
-        setScannerActive(false);
-      } else if (res.data.error === "Attendance already marked") {
-        setStatus('✅ You’ve already marked attendance');
-        setQrBorderColor('limegreen');
-        setScannerActive(false);
-      } else if (res.data.error?.toLowerCase().includes("expired")) {
-        setStatus('⏳ QR expired, waiting for latest code...');
-        setQrBorderColor('orange');
-      } else {
-        setStatus('❌ ' + (res.data.error || 'Attendance failed'));
-        setQrBorderColor('red');
-      }
-
-      setTimeout(() => setQrBorderColor('gray'), 2000);
-    } catch (err) {
-      console.error('QR scan error:', err);
-      setStatus('⚠️ QR error — maybe expired, waiting for refresh...');
-      setQrBorderColor('orange');
+      parsed = JSON.parse(qrText);
+    } catch {
+      setStatus("⚠️ Invalid QR format");
+      setQrBorderColor("red");
+      return;
     }
-  };
+
+    if (!parsed.sessionId || !parsed.qrToken) {
+      setStatus("⚠️ Expired or invalid QR code");
+      setQrBorderColor("red");
+      return;
+    }
+
+    setSessionId(parsed.sessionId);
+
+    const res = await api.post("/attendance/mark", {
+      userId: loggedUser.userId,
+      sessionId: parsed.sessionId,
+      qrToken: parsed.qrToken,
+    });
+
+    if (res.data.success) {
+      setStatus("✅ Attendance marked");
+      setQrBorderColor("limegreen");
+      setScannerActive(false);
+    } else if (res.data.error === "Attendance already marked") {
+      setStatus("✅ You’ve already marked attendance");
+      setQrBorderColor("limegreen");
+      setScannerActive(false);
+    } else if (res.data.error?.toLowerCase().includes("expired")) {
+      setStatus("⏳ QR expired, refreshing...");
+      setQrBorderColor("orange");
+
+      // 🔁 Restart scanner automatically after short delay
+      setTimeout(() => {
+        setQrKey(prev => prev + 1); // force QrScanner re-mount
+        setScannerActive(true);
+        setStatus("📷 Ready — scan the latest QR code");
+        setQrBorderColor("gray");
+      }, 2000);
+    } else {
+      setStatus("❌ " + (res.data.error || "Attendance failed"));
+      setQrBorderColor("red");
+
+      // Reset border after 2s
+      setTimeout(() => setQrBorderColor("gray"), 2000);
+    }
+  } catch (err) {
+    console.error("QR scan error:", err);
+    setStatus("⚠️ QR error — maybe expired, waiting for refresh...");
+    setQrBorderColor("orange");
+
+    // 🔁 Restart scanner to retry
+    setTimeout(() => {
+      setQrKey(prev => prev + 1);
+      setScannerActive(true);
+      setStatus("📷 Ready — scan the latest QR code");
+      setQrBorderColor("gray");
+    }, 2000);
+  }
+};
 
   /* ---------------- QR Error Handler ---------------- */
   const handleError = err => {
