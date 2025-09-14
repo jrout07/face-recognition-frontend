@@ -96,7 +96,7 @@ const StudentDashboard = ({ loggedUser }) => {
       }
 
       if (!parsed.sessionId || !parsed.qrToken) {
-        setStatus("⚠️ Expired QR — waiting for new one...");
+        setStatus("⚠️ Expired/invalid QR — waiting for new one...");
         setQrBorderColor("red");
         setTimeout(() => {
           setQrBorderColor("gray");
