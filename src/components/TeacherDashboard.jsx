@@ -69,8 +69,7 @@ export default function TeacherDashboard() {
     const imageBase64 = canvas.toDataURL("image/jpeg");
 
     try {
-      const res = await api.post("/markAttendanceLive", {
-        sessionId: "teacher-verification", // dummy session for teacher
+      const res = await api.post("/verifyFaceOnly", {
         userId: form.teacherId,
         imageBase64,
       });
@@ -183,6 +182,7 @@ export default function TeacherDashboard() {
         setAttendanceFinalized(true);
         clearInterval(qrPollRef.current);
         clearInterval(countdownRef.current);
+        clearInterval(attendancePollRef.current);
       } else {
         alert(res.data.error || "Failed to finalize attendance");
       }
@@ -384,9 +384,33 @@ export default function TeacherDashboard() {
 
             {students.length > 0 && (
               <div style={{ marginTop: 30 }}>
-                <h4 style={{ textAlign: "center" }}>Scanned Students</h4>
+                {!attendanceFinalized && (
+                  <>
+                    <h4 style={{ textAlign: "center" }}>🕒 Pending Students</h4>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center" }}>
+                      {students.filter(s => !s.finalized).map(s => (
+                        <div
+                          key={s.userId}
+                          style={{
+                            border: "1px solid #000",
+                            padding: 10,
+                            borderRadius: 6,
+                            width: "45%",
+                            textAlign: "center",
+                            backgroundColor: "#fff",
+                          }}
+                        >
+                          <p>{s.userId}</p>
+                          <p style={{ color: "#e67e22", fontWeight: "bold" }}>Pending</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <h4 style={{ textAlign: "center", marginTop: 20 }}>✅ Finalized Attendance</h4>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center" }}>
-                  {students.map(s => (
+                  {students.filter(s => s.finalized).map(s => (
                     <div
                       key={s.userId}
                       style={{
@@ -395,16 +419,11 @@ export default function TeacherDashboard() {
                         borderRadius: 6,
                         width: "45%",
                         textAlign: "center",
-                        backgroundColor: s.status === "present" ? "#d4edda" : "#fff",
+                        backgroundColor: "#d4edda",
                       }}
                     >
                       <p>{s.userId}</p>
-                      <p>{s.status}</p>
-                      {s.finalized ? (
-                        <p style={{ color: "green", fontWeight: "bold" }}>✅ Finalized</p>
-                      ) : (
-                        <p style={{ color: "#e67e22", fontWeight: "bold" }}>🕒 Pending</p>
-                      )}
+                      <p style={{ color: "green", fontWeight: "bold" }}>Finalized</p>
                     </div>
                   ))}
                 </div>
