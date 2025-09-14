@@ -58,7 +58,7 @@ export default function TeacherDashboard() {
     }
   };
 
-  /* ---------------- Auto Face Verify (No Smile Required) ---------------- */
+  /* ---------------- Auto Face Verify ---------------- */
   const autoFaceVerify = async () => {
     if (!videoRef.current || faceVerified) return;
 
@@ -69,18 +69,16 @@ export default function TeacherDashboard() {
     const imageBase64 = canvas.toDataURL("image/jpeg");
 
     try {
-      // Directly verify face
       const res = await api.post("/markAttendanceLive", {
+        sessionId: "teacher-verification", // dummy session for teacher
         userId: form.teacherId,
         imageBase64,
-        smileVerified: false, // ✅ no smile check
       });
 
       if (res.data.success) {
         setFaceVerified(true);
         setVerificationMsg("✅ Face verified!");
         stopCamera();
-        fetchStudents();
         await createSession();
       } else {
         setVerificationMsg("❌ Face not matched. Retrying...");
@@ -89,18 +87,6 @@ export default function TeacherDashboard() {
     } catch (err) {
       setVerificationMsg("⚠️ Error verifying face. Retrying...");
       faceVerifyTimeoutRef.current = setTimeout(autoFaceVerify, 3000);
-    }
-  };
-
-  /* ---------------- Students ---------------- */
-  const fetchStudents = async () => {
-    try {
-      const res = await api.get(`/teacher/class-students/${classId}`);
-      if (res.data.success) {
-        setStudents(res.data.students.map(s => ({ ...s, attended: false })));
-      }
-    } catch (err) {
-      console.error(err);
     }
   };
 
@@ -114,11 +100,13 @@ export default function TeacherDashboard() {
 
       if (res.data.success) {
         sessionRef.current = res.data.session;
-        setQrData(JSON.stringify({
-          sessionId: res.data.session.sessionId,
-          qrToken: res.data.session.qrToken
-        }));
-        startQrCountdown(20); // ⬅️ 20s countdown
+        setQrData(
+          JSON.stringify({
+            sessionId: res.data.session.sessionId,
+            qrToken: res.data.session.qrToken,
+          })
+        );
+        startQrCountdown(20);
         startQrAutoRefresh();
       }
     } catch (err) {
@@ -136,16 +124,18 @@ export default function TeacherDashboard() {
         const res = await api.get(`/teacher/getSession/${classId}`);
         if (res.data.success) {
           sessionRef.current.qrToken = res.data.session.qrToken;
-          setQrData(JSON.stringify({
-            sessionId: sessionRef.current.sessionId,
-            qrToken: res.data.session.qrToken
-          }));
-          setQrCountdown(20); // reset to 20s
+          setQrData(
+            JSON.stringify({
+              sessionId: sessionRef.current.sessionId,
+              qrToken: res.data.session.qrToken,
+            })
+          );
+          setQrCountdown(20);
         }
       } catch (err) {
         console.error("QR refresh error:", err);
       }
-    }, 15000); // refresh every 15s
+    }, 15000);
   };
 
   /* ---------------- QR Countdown ---------------- */
@@ -166,17 +156,12 @@ export default function TeacherDashboard() {
 
   /* ---------------- Attendance Poll ---------------- */
   useEffect(() => {
-    if (!faceVerified) return;
+    if (!faceVerified || !sessionRef.current) return;
     attendancePollRef.current = setInterval(async () => {
       try {
-        const res = await api.get(`/teacher/scanned-students/${classId}`);
+        const res = await api.get(`/teacher/viewAttendance/${sessionRef.current.sessionId}`);
         if (res.data.success) {
-          setStudents(prev =>
-            prev.map(s => ({
-              ...s,
-              attended: res.data.students.some(st => st.userId === s.userId),
-            }))
-          );
+          setStudents(res.data.attendance || []);
         }
       } catch (err) {
         console.error(err);
@@ -186,11 +171,11 @@ export default function TeacherDashboard() {
     return () => clearInterval(attendancePollRef.current);
   }, [faceVerified, classId]);
 
-  /* ---------------- Submit Attendance ---------------- */
-  const submitAttendance = async () => {
+  /* ---------------- Finalize Attendance ---------------- */
+  const finalizeAttendance = async () => {
     if (!sessionRef.current) return;
     try {
-      const res = await api.post("/teacher/submitAttendance", {
+      const res = await api.post("/teacher/finalizeAttendance", {
         sessionId: sessionRef.current.sessionId,
       });
       if (res.data.success) {
@@ -199,11 +184,11 @@ export default function TeacherDashboard() {
         clearInterval(qrPollRef.current);
         clearInterval(countdownRef.current);
       } else {
-        alert(res.data.error || "Failed to submit attendance");
+        alert(res.data.error || "Failed to finalize attendance");
       }
     } catch (err) {
       console.error(err);
-      alert("Error submitting attendance: " + err.message);
+      alert("Error finalizing attendance: " + err.message);
     }
   };
 
@@ -353,9 +338,7 @@ export default function TeacherDashboard() {
                       marginTop: 10,
                     }}
                   >
-                    {qrCountdown > 0
-                      ? `QR refreshes in: ${qrCountdown}s`
-                      : "Generating new QR..."}
+                    {qrCountdown > 0 ? `QR refreshes in: ${qrCountdown}s` : "Generating new QR..."}
                   </p>
 
                   <div
@@ -381,7 +364,7 @@ export default function TeacherDashboard() {
                   </div>
 
                   <button
-                    onClick={submitAttendance}
+                    onClick={finalizeAttendance}
                     style={{
                       marginTop: 15,
                       padding: "10px 16px",
@@ -401,7 +384,7 @@ export default function TeacherDashboard() {
 
             {students.length > 0 && (
               <div style={{ marginTop: 30 }}>
-                <h4 style={{ textAlign: "center" }}>Registered Students</h4>
+                <h4 style={{ textAlign: "center" }}>Scanned Students</h4>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center" }}>
                   {students.map(s => (
                     <div
@@ -412,12 +395,16 @@ export default function TeacherDashboard() {
                         borderRadius: 6,
                         width: "45%",
                         textAlign: "center",
-                        backgroundColor: s.attended ? "#d4edda" : "#fff",
+                        backgroundColor: s.status === "present" ? "#d4edda" : "#fff",
                       }}
                     >
-                      <p>{s.name}</p>
                       <p>{s.userId}</p>
-                      {s.attended && <p style={{ color: "green", fontWeight: "bold" }}>✅ Attendance</p>}
+                      <p>{s.status}</p>
+                      {s.finalized ? (
+                        <p style={{ color: "green", fontWeight: "bold" }}>✅ Finalized</p>
+                      ) : (
+                        <p style={{ color: "#e67e22", fontWeight: "bold" }}>🕒 Pending</p>
+                      )}
                     </div>
                   ))}
                 </div>
