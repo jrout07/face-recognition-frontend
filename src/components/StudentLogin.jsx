@@ -11,13 +11,16 @@ const StudentDashboard = ({ loggedUser }) => {
   const qrVideoContainerRef = useRef(null);
   const qrScannerRef = useRef(null);
 
-  // 1. Face verification
+  /**
+   * 1. Face Verification
+   */
   useEffect(() => {
     const verifyFace = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "user" },
         });
+
         const videoElem = document.createElement("video");
         videoElem.srcObject = stream;
         await videoElem.play();
@@ -26,6 +29,7 @@ const StudentDashboard = ({ loggedUser }) => {
         canvas.width = 320;
         canvas.height = 240;
         canvas.getContext("2d").drawImage(videoElem, 0, 0, canvas.width, canvas.height);
+
         const imageBase64 = canvas.toDataURL("image/jpeg");
 
         const res = await api.post("/verifyFaceOnly", {
@@ -50,7 +54,9 @@ const StudentDashboard = ({ loggedUser }) => {
     if (step === "verify") verifyFace();
   }, [step, loggedUser.userId]);
 
-  // 2. QR scanner setup
+  /**
+   * 2. Setup QR Scanner
+   */
   useEffect(() => {
     if (step !== "scanQR" || !qrVideoContainerRef.current) return;
 
@@ -72,7 +78,9 @@ const StudentDashboard = ({ loggedUser }) => {
     };
   }, [step]);
 
-  // 3. Handle QR scan
+  /**
+   * 3. Handle QR Scan Result
+   */
   const handleScan = async (data) => {
     if (!data || !scannerActive) return;
 
@@ -97,7 +105,7 @@ const StudentDashboard = ({ loggedUser }) => {
         return;
       }
 
-      // ✅ Use QrScanner’s video element for snapshot
+      // ✅ Take snapshot from QrScanner video
       const videoElem = qrVideoContainerRef.current.querySelector("video");
       if (!videoElem) {
         setStatus("⚠️ Camera not ready");
@@ -113,7 +121,7 @@ const StudentDashboard = ({ loggedUser }) => {
       const res = await api.post("/markAttendanceLive", {
         userId: loggedUser.userId,
         sessionId: parsed.sessionId,
-        qrToken: parsed.qrToken, // ✅ include qrToken
+        qrToken: parsed.qrToken,
         imageBase64,
       });
 
@@ -142,6 +150,9 @@ const StudentDashboard = ({ loggedUser }) => {
     }
   };
 
+  /**
+   * UI Render
+   */
   return (
     <div className="p-6 bg-gray-100 min-h-screen">
       <h1 className="text-xl font-bold mb-4">Student Login & Attendance</h1>
