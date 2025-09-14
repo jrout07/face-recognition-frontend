@@ -109,10 +109,7 @@ export default function StudentLogin() {
     const checkFace = async () => {
       if (!videoRef.current) return;
 
-      if (
-        videoRef.current.videoWidth === 0 ||
-        videoRef.current.videoHeight === 0
-      ) {
+      if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
         videoRef.current.onloadedmetadata = () => checkFace();
         return;
       }
@@ -120,21 +117,17 @@ export default function StudentLogin() {
       const canvas = document.createElement("canvas");
       canvas.width = videoRef.current.videoWidth;
       canvas.height = videoRef.current.videoHeight;
-      canvas
-        .getContext("2d")
-        .drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const imageBase64 = canvas.toDataURL("image/jpeg").split(",")[1];
+      canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      const imageBase64 = canvas.toDataURL("image/jpeg");
 
       try {
-        const faceRes = await api.post("/markAttendanceLive", {
+        // Just verify face at this step
+        const faceRes = await api.post("/verifyFaceOnly", {
           userId: loggedUser.userId,
           imageBase64,
         });
 
-        if (
-          faceRes.data.success &&
-          faceRes.data.message?.toLowerCase().includes("verified")
-        ) {
+        if (faceRes.data.success) {
           setStatus("✅ Face verified! Moving to QR...");
           setFaceBorderColor("limegreen");
           stopCamera();
@@ -164,7 +157,7 @@ export default function StudentLogin() {
     return () => clearInterval(retryInterval);
   }, [step, loggedUser]);
 
-  /* ---------------- QR Scan ---------------- */
+  /* ---------------- QR Scan + Attendance ---------------- */
   const handleScan = async (data) => {
     if (!data || !scannerActive) return;
 
@@ -187,50 +180,36 @@ export default function StudentLogin() {
 
       setSessionId(parsed.sessionId);
 
-      const res = await api.post("/attendance/mark", {
+      // Take snapshot again for attendance marking
+      const canvas = document.createElement("canvas");
+      canvas.width = videoRef.current?.videoWidth || 320;
+      canvas.height = videoRef.current?.videoHeight || 240;
+      canvas.getContext("2d").drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+      const imageBase64 = canvas.toDataURL("image/jpeg");
+
+      // Call new endpoint
+      const res = await api.post("/markAttendanceLive", {
         userId: loggedUser.userId,
         sessionId: parsed.sessionId,
-        qrToken: parsed.qrToken,
+        imageBase64,
       });
 
       if (res.data.success) {
-        setStatus("✅ Attendance marked");
+        setStatus("✅ Attendance marked (awaiting teacher finalize)");
         setQrBorderColor("limegreen");
         setScannerActive(false);
-      } else if (res.data.error === "Attendance already marked") {
-        setStatus("✅ You’ve already marked attendance");
+      } else if (res.data.error?.toLowerCase().includes("already")) {
+        setStatus("✅ Already marked (pending finalize)");
         setQrBorderColor("limegreen");
         setScannerActive(false);
-      } else if (res.data.error?.toLowerCase().includes("expired")) {
-        setStatus("⏳ QR expired, refreshing...");
-        setQrBorderColor("orange");
-
-        // 🔁 Restart scanner automatically after short delay
-        setTimeout(() => {
-          setQrKey((prev) => prev + 1); // force QrScanner re-mount
-          setScannerActive(true);
-          setStatus("📷 Ready — scan the latest QR code");
-          setQrBorderColor("gray");
-        }, 1000);
       } else {
-        setStatus("❌ " + (res.data.error || "Attendance failed"));
+        setStatus("❌ " + (res.data.error || "Failed to mark attendance"));
         setQrBorderColor("red");
-
-        // Reset border after 2s
-        setTimeout(() => setQrBorderColor("gray"), 2000);
       }
     } catch (err) {
       console.error("QR scan error:", err);
-      setStatus("⚠️ QR error — maybe expired, waiting for refresh...");
+      setStatus("⚠️ QR error — retry with next code");
       setQrBorderColor("orange");
-
-      // 🔁 Restart scanner to retry
-      setTimeout(() => {
-        setQrKey((prev) => prev + 1);
-        setScannerActive(true);
-        setStatus("📷 Ready — scan the latest QR code");
-        setQrBorderColor("gray");
-      }, 1000);
     }
   };
 
