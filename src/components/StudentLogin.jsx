@@ -162,7 +162,6 @@ export default function StudentDashboard() {
       if (!parsed.sessionId || !parsed.qrToken) {
         setStatus("⚠️ Expired QR — waiting for new one...");
         setQrBorderColor("red");
-        // auto-reset border & status so scanner continues
         setTimeout(() => {
           setQrBorderColor("gray");
           setStatus("⏳ Waiting for valid QR...");
@@ -177,9 +176,11 @@ export default function StudentDashboard() {
       canvas.getContext("2d").drawImage(qrVideoRef.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL("image/jpeg");
 
+      // ✅ Include qrToken when calling backend
       const res = await api.post("/markAttendanceLive", {
         userId: loggedUser.userId,
         sessionId: parsed.sessionId,
+        qrToken: parsed.qrToken,
         imageBase64,
       });
 
@@ -194,7 +195,6 @@ export default function StudentDashboard() {
       } else {
         setStatus("❌ " + (res.data.error || "Failed to mark attendance"));
         setQrBorderColor("red");
-        // auto-reset to keep scanning
         setTimeout(() => setQrBorderColor("gray"), 1500);
       }
     } catch (err) {
