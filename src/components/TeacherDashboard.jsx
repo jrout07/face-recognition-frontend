@@ -8,7 +8,8 @@ const TeacherDashboard = ({ teacherId, classId }) => {
   const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const intervalRef = useRef(null);
+  const qrIntervalRef = useRef(null);
+  const attendanceIntervalRef = useRef(null);
 
   // Create a new session
   const createSession = async () => {
@@ -37,7 +38,10 @@ const TeacherDashboard = ({ teacherId, classId }) => {
   useEffect(() => {
     if (!session || session.finalized) return;
 
-    intervalRef.current = setInterval(async () => {
+    // clear any previous interval
+    if (qrIntervalRef.current) clearInterval(qrIntervalRef.current);
+
+    qrIntervalRef.current = setInterval(async () => {
       try {
         const res = await api.get(`/teacher/getSession/${session.classId}`);
         if (res.data.success) {
@@ -48,10 +52,10 @@ const TeacherDashboard = ({ teacherId, classId }) => {
       }
     }, 20000);
 
-    return () => clearInterval(intervalRef.current);
+    return () => clearInterval(qrIntervalRef.current);
   }, [session]);
 
-  // Fetch attendance records
+  // Fetch attendance records (manual + auto-refresh)
   const fetchAttendance = async () => {
     if (!session) return;
     try {
@@ -65,6 +69,24 @@ const TeacherDashboard = ({ teacherId, classId }) => {
       setError("Error fetching attendance");
     }
   };
+
+  // Auto-refresh attendance every 10s
+  useEffect(() => {
+    if (!session || session.finalized) return;
+
+    // clear old interval
+    if (attendanceIntervalRef.current)
+      clearInterval(attendanceIntervalRef.current);
+
+    // run immediately once
+    fetchAttendance();
+
+    attendanceIntervalRef.current = setInterval(() => {
+      fetchAttendance();
+    }, 10000);
+
+    return () => clearInterval(attendanceIntervalRef.current);
+  }, [session]);
 
   // Finalize attendance
   const finalizeAttendance = async () => {
@@ -110,7 +132,8 @@ const TeacherDashboard = ({ teacherId, classId }) => {
             <strong>Class:</strong> {session.classId}
           </p>
           <p>
-            <strong>Valid Until:</strong> {new Date(session.validUntil).toLocaleString()}
+            <strong>Valid Until:</strong>{" "}
+            {new Date(session.validUntil).toLocaleString()}
           </p>
           <p>
             <strong>Status:</strong>{" "}
@@ -124,8 +147,17 @@ const TeacherDashboard = ({ teacherId, classId }) => {
           {!session.finalized && (
             <>
               <div className="mt-4">
-                <h3 className="font-medium">QR Code (refreshes every 20s):</h3>
-                <QRCode value={session.qrToken} size={200} className="mt-2" />
+                <h3 className="font-medium">
+                  QR Code (refreshes every 20s):
+                </h3>
+                <QRCode
+                  value={JSON.stringify({
+                    sessionId: session.sessionId,
+                    qrToken: session.qrToken,
+                  })}
+                  size={200}
+                  className="mt-2"
+                />
               </div>
 
               <div className="mt-4 flex gap-4">
@@ -133,7 +165,7 @@ const TeacherDashboard = ({ teacherId, classId }) => {
                   onClick={fetchAttendance}
                   className="bg-green-500 text-white px-4 py-2 rounded"
                 >
-                  View Attendance
+                  Refresh Attendance Now
                 </button>
                 <button
                   onClick={finalizeAttendance}
