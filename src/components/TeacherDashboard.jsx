@@ -118,7 +118,7 @@ export default function TeacherDashboard() {
           sessionId: res.data.session.sessionId,
           qrToken: res.data.session.qrToken
         }));
-        startQrCountdown(600); // 10 min
+        startQrCountdown(20); // ⬅️ 20s countdown
         startQrAutoRefresh();
       }
     } catch (err) {
@@ -140,12 +140,12 @@ export default function TeacherDashboard() {
             sessionId: sessionRef.current.sessionId,
             qrToken: res.data.session.qrToken
           }));
-          setQrCountdown(600);
+          setQrCountdown(20); // reset to 20s
         }
       } catch (err) {
         console.error("QR refresh error:", err);
       }
-    }, 10000); // every 10s
+    }, 15000); // refresh every 15s
   };
 
   /* ---------------- QR Countdown ---------------- */
@@ -349,7 +349,7 @@ export default function TeacherDashboard() {
                     style={{
                       fontSize: "20px",
                       fontWeight: "bold",
-                      color: qrCountdown <= 60 && qrCountdown > 0 ? "#e74c3c" : "#27ae60",
+                      color: qrCountdown <= 5 && qrCountdown > 0 ? "#e74c3c" : "#27ae60",
                       marginTop: 10,
                     }}
                   >
@@ -373,8 +373,8 @@ export default function TeacherDashboard() {
                     <div
                       style={{
                         height: "100%",
-                        width: `${(qrCountdown / 600) * 100}%`,
-                        backgroundColor: qrCountdown <= 60 && qrCountdown > 0 ? "#e74c3c" : "#27ae60",
+                        width: `${(qrCountdown / 20) * 100}%`,
+                        backgroundColor: qrCountdown <= 5 && qrCountdown > 0 ? "#e74c3c" : "#27ae60",
                         transition: "width 1s linear",
                       }}
                     />
